@@ -1,0 +1,114 @@
+##
+# PHP-FPM pool and OPcache tuning.
+#
+# Pool sizing is the one place where a wrong number takes the machine down rather
+# than merely making it slow: pm.max_children is the hard ceiling on concurrent
+# workers, and max_children multiplied by memory_limit is what the box must be
+# able to survive at full load.
+#
+# The two are therefore derived together. Sizing max_children against a measured
+# average while allowing each worker a much larger memory_limit commits far more
+# memory than the pool holds -- the arithmetic looks safe and the machine still
+# dies under a traffic spike.
+##
+component: php-fpm
+ruleset_version: 1
+
+applies_to:
+  service: php
+  versions: ['8.1', '8.2', '8.3', '8.4', '8.5']
+
+rules:
+  - key: pm.max_children
+    formula: 'max(site_pool_mb / memory_limit_mb, 2)'
+    apply: reload
+    severity_if_default: high
+    why: |
+      The hard ceiling on workers running at once, and the machine's protection
+      against running out of memory. Derived from this site's share of the pool
+      divided by what each worker is actually permitted to use, so the worst case
+      at full concurrency still fits in the memory set aside for it.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: pm.start_servers
+    formula: 'max(site_pool_mb / memory_limit_mb / 4, 2)'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Workers forked at startup, about a quarter of the ceiling. Enough of a warm
+      pool that a burst of traffic is not paying fork() latency on every request,
+      without pinning the whole ceiling in memory while the site is idle.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: pm.min_spare_servers
+    formula: 'max(site_pool_mb / memory_limit_mb * 0.15, 2)'
+    apply: reload
+    severity_if_default: low
+    why: |
+      When idle workers fall below this, FPM forks more. Keeps a small buffer
+      ready for the next spike.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: pm.max_spare_servers
+    formula: 'max(site_pool_mb / memory_limit_mb * 0.35, 3)'
+    apply: reload
+    severity_if_default: low
+    why: |
+      When idle workers exceed this, FPM reaps them and returns the memory. The
+      gap between min and max spare is what stops the pool oscillating.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: pm.max_requests
+    value: '1000'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Recycles a worker after this many requests. PHP-FPM workers accumulate
+      memory over their lifetime -- through extensions, fragmentation, and code
+      that leaks -- and without recycling a long-lived pool drifts upward until
+      the box is out of memory. The default of 0 never recycles.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: opcache.memory_consumption
+    formula: 'opcache_shm_mb'
+    apply: restart
+    severity_if_default: high
+    default_hint: '128'
+    why: |
+      The shared memory holding compiled PHP. Too small and the cache thrashes,
+      recompiling the same files continuously; the default assumes a far smaller
+      application than a modern framework. Allocated once per PHP version at
+      startup, which is why the budget counts it separately from worker memory.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: opcache.max_accelerated_files
+    value: '20000'
+    apply: restart
+    severity_if_default: medium
+    default_hint: '10000'
+    why: |
+      How many files the cache can hold. A Laravel application with its vendor
+      tree exceeds the default comfortably, and files past the limit are
+      recompiled on every request.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: opcache.interned_strings_buffer
+    value: '64'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Memory for strings shared between requests. The default is small enough
+      that a large application exhausts it and loses the deduplication.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md
+
+  - key: opcache.jit_buffer_size
+    formula: 'opcache_jit_mb'
+    unit: M
+    apply: restart
+    min_version: '8.0'
+    severity_if_default: low
+    why: |
+      Memory for JIT-compiled code. Available from PHP 8.0. The gain on a typical
+      web request is modest -- most time is spent in I/O rather than in PHP -- so
+      this is sized conservatively rather than generously.
+    kb_ref: OPTIMIZATION_V2/03-PHP-CLI-FPM-OPCACHE.md

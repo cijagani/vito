@@ -10,6 +10,7 @@ use App\Models\Server;
 use App\Models\User;
 use App\Optimizers\Database\PostgresOptimizer;
 use App\Optimizers\OptimizerInterface;
+use App\Optimizers\PHP\FpmOptimizer;
 use App\Support\Optimization\ResourceBudget;
 use App\Support\Optimization\RulesetLoader;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +54,15 @@ class GeneratePlan
                 ...app($optimizer)->propose($facts, $budget, $probe),
             ];
         }
+
+        // PHP-FPM is sized per site rather than per server, so it needs the sites
+        // the pool is being divided between.
+        $proposals = [
+            ...$proposals,
+            ...app(FpmOptimizer::class)
+                ->forSites($server->sites)
+                ->propose($facts, $budget, $probe),
+        ];
 
         return DB::transaction(function () use ($server, $user, $facts, $budget, $proposals): OptimizationPlan {
             $plan = OptimizationPlan::query()->create([

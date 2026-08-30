@@ -101,14 +101,16 @@ test('flags a plan that would restart rather than reload', function () {
     expect($plan->isDisruptive())->toBeTrue();
 });
 
-test('proposes nothing for a server whose database is elsewhere', function () {
+test('proposes no database settings for a server whose database is elsewhere', function () {
     $this->server->services()->where('type', 'database')->delete();
 
     SSH::fake(planProbeOutput());
 
     $plan = (new GeneratePlan)->handle($this->server);
 
-    expect($plan->proposals)->toHaveCount(0)
+    // PHP-FPM is still tuned; only the database rules are skipped, and the pool
+    // is larger precisely because no memory is reserved for a database here.
+    expect($plan->proposals->where('component', 'postgresql'))->toHaveCount(0)
         ->and($plan->facts['db_local'])->toBeFalse();
 });
 
