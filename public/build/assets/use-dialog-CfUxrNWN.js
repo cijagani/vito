@@ -1,0 +1,1 @@
+import{a as e}from"./jsx-runtime-CMgEUHpv.js";import{f as t}from"./utils-B_8VNpDJ.js";import{n,t as r}from"./registry-BRJRd3qs.js";var i=e(t(),1);function a(e){return{open:t=>n.getState().open(e,t),close:()=>n.getState().close()}}function o(){return(0,i.useMemo)(()=>{let e={};return Object.keys(r).forEach(t=>{e[t]=a(t)}),e},[])}export{o as t};
