@@ -39,12 +39,16 @@ class ChangeWriter
 
         $existing = $this->read($server, $path);
 
-        // A file edited between drawing the plan and applying it is no longer the
-        // file the plan was reasoned about. Overwriting it would silently discard
-        // whatever the operator did in the meantime.
-        if ($expectedHash !== null && $existing !== null && hash('sha256', $existing) !== $expectedHash) {
+        // A file edited since Vito last wrote it is no longer the file any plan was
+        // reasoned about, and overwriting it discards that work silently. The
+        // caller may name the hash it expects; otherwise the last hash Vito
+        // recorded for this path is used, so every applier gets the check without
+        // having to remember to ask for it.
+        $expectedHash ??= $this->lastAppliedHash($server, $path);
+
+        if ($expectedHash !== null && $existing !== null && self::hash($existing) !== $expectedHash) {
             throw new ConfigurationDriftException(
-                "[{$path}] has changed on the server since this plan was created."
+                "[{$path}] has been edited on the server since Vito last wrote it."
             );
         }
 
@@ -54,7 +58,7 @@ class ChangeWriter
                 ? OptimizationChange::ACTION_CREATED
                 : OptimizationChange::ACTION_MODIFIED,
             'backup_content' => $existing,
-            'backup_hash' => $existing === null ? null : hash('sha256', $existing),
+            'backup_hash' => $existing === null ? null : self::hash($existing),
         ]);
 
         $server->os()->write($path, $content, 'root');
@@ -70,6 +74,9 @@ class ChangeWriter
             throw $exception;
         }
 
+        // Recorded so drift detection can tell later whether anything has edited
+        // the file since Vito wrote it.
+        $change->applied_hash = self::hash($content);
         $change->applied_at = now();
         $change->save();
 
@@ -95,6 +102,35 @@ class ChangeWriter
 
         $change->reverted_at = now();
         $change->save();
+    }
+
+    /**
+     * Hashes file content for comparison.
+     *
+     * Reading a file over SSH trims it, so content written with a trailing newline
+     * comes back without one. Hashing the raw strings would report every managed
+     * file as drifted the moment it was written; both sides are trimmed so the
+     * comparison is about the content rather than its whitespace.
+     */
+    public static function hash(string $content): string
+    {
+        return hash('sha256', trim($content));
+    }
+
+    /**
+     * The hash of the last content Vito wrote to this path on this server, or null
+     * when Vito has never written it -- in which case there is nothing to compare
+     * against and the write proceeds.
+     */
+    private function lastAppliedHash(Server $server, string $path): ?string
+    {
+        return OptimizationChange::query()
+            ->whereHas('plan', fn ($query) => $query->where('server_id', $server->id))
+            ->where('target_path', $path)
+            ->whereNotNull('applied_at')
+            ->whereNull('reverted_at')
+            ->latest('applied_at')
+            ->value('applied_hash');
     }
 
     /**

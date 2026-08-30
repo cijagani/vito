@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Optimization\ApplyPlan;
+use App\Actions\Optimization\DetectDrift;
 use App\Actions\Optimization\GeneratePlan;
+use App\Actions\Optimization\VerifyPlan;
 use App\Http\Resources\OptimizationPlanResource;
 use App\Jobs\Optimization\ApplyPlanJob;
 use App\Jobs\Optimization\RollbackPlanJob;
 use App\Models\OptimizationPlan;
 use App\Models\Server;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -85,6 +88,35 @@ class OptimizationController extends Controller
         dispatch(new RollbackPlanJob($plan))->onQueue('ssh');
 
         return back()->with('success', 'Rolling back the optimization.');
+    }
+
+    /**
+     * Ask the server what it now reports for the settings this plan applied.
+     */
+    #[Post('/{plan}/verify', name: 'optimization.verify')]
+    public function verify(Server $server, OptimizationPlan $plan, VerifyPlan $verify): RedirectResponse
+    {
+        $this->authorize('view', $plan);
+        $this->ensureBelongsTo($plan, $server);
+
+        $plan->verification = array_map(
+            fn ($result): array => $result->toArray(),
+            $verify->handle($plan)
+        );
+        $plan->save();
+
+        return back()->with('success', 'Verified against the server.');
+    }
+
+    /**
+     * Report which managed files have been edited outside Vito.
+     */
+    #[Get('/drift/check', name: 'optimization.drift')]
+    public function drift(Server $server, DetectDrift $detect): JsonResponse
+    {
+        $this->authorize('viewAny', [OptimizationPlan::class, $server]);
+
+        return response()->json(['drift' => $detect->handle($server)]);
     }
 
     #[Get('/{plan}', name: 'optimization.show')]

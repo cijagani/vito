@@ -37,6 +37,7 @@ class ApplyPlan
         private readonly NginxContextApplier $nginxContext = new NginxContextApplier,
         private readonly KernelApplier $kernel = new KernelApplier,
         private readonly RedisApplier $redis = new RedisApplier,
+        private readonly VerifyPlan $verify = new VerifyPlan,
         private readonly RollbackPlan $rollback = new RollbackPlan,
     ) {}
 
@@ -117,9 +118,34 @@ class ApplyPlan
 
         $plan->status = OptimizationPlanStatus::APPLIED;
         $plan->applied_at = now();
+        $plan->verification = $this->verifyQuietly($plan);
         $plan->save();
 
         return $plan;
+    }
+
+    /**
+     * Asks the server what it now believes, and records the answer.
+     *
+     * A failure here is a finding, not an error: the plan was applied, and what
+     * verification adds is knowing whether it took effect. Throwing would roll back
+     * a change that may well be correct, so the result is stored for the operator
+     * to read instead.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function verifyQuietly(OptimizationPlan $plan): array
+    {
+        try {
+            return array_map(
+                fn ($result): array => $result->toArray(),
+                $this->verify->handle($plan)
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return [];
+        }
     }
 
     /**

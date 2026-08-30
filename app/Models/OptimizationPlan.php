@@ -23,6 +23,7 @@ use Illuminate\Support\Collection;
  * @property ?array<string, mixed> $facts
  * @property ?array<string, mixed> $budget
  * @property ?array<string, int> $ruleset_versions
+ * @property ?array<int, array<string, mixed>> $verification
  * @property ?\Carbon\Carbon $applied_at
  * @property ?\Carbon\Carbon $rolled_back_at
  * @property Server $server
@@ -40,6 +41,7 @@ class OptimizationPlan extends AbstractModel
         'facts',
         'budget',
         'ruleset_versions',
+        'verification',
         'applied_at',
         'rolled_back_at',
     ];
@@ -51,6 +53,7 @@ class OptimizationPlan extends AbstractModel
         'facts' => 'json',
         'budget' => 'json',
         'ruleset_versions' => 'json',
+        'verification' => 'json',
         'applied_at' => 'datetime',
         'rolled_back_at' => 'datetime',
     ];

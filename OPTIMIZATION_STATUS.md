@@ -16,7 +16,7 @@
 | **3** | MySQL / MariaDB | **Done** (never run against a real server) |
 | **4** | PHP-FPM apply | **Done** (never run against a real server) |
 | **5** | nginx · OS · Redis | **Done** (never run against a real server) |
-| **6** | Verify + drift detection | Not started |
+| **6** | Verify + drift detection | **Done** (never run against a real server) |
 | **7** | AI advisor | Not started |
 
 **Analysis still modifies nothing** — a test asserts it issues no `ALTER SYSTEM` and no
@@ -78,7 +78,7 @@ original first and restores it if the service rejects the result.
 | Models | `app/Models/OptimizationPlan.php`, `OptimizationProposal.php`, `OptimizationChange.php` |
 | Schema | `database/migrations/2026_08_30_130000_create_optimization_tables.php` |
 | Policy | `app/Policies/OptimizationPlanPolicy.php` |
-| Controller | `app/Http/Controllers/OptimizationController.php` (5 named routes) |
+| Controller | `app/Http/Controllers/OptimizationController.php` (7 named routes) |
 | Resources | `app/Http/Resources/OptimizationPlanResource.php`, `OptimizationProposalResource.php` |
 | UI | `resources/js/pages/optimization/` |
 | Load class | `app/Enums/SiteLoadClass.php` + `sites.load_class` |
@@ -87,7 +87,7 @@ original first and restores it if the service rejects the result.
 
 ## Tests
 
-**~150 tests passing.** All SSH is faked; no real connections.
+**~180 tests passing.** All SSH is faked; no real connections.
 
 | File | Covers |
 | --- | --- |
@@ -103,6 +103,7 @@ original first and restores it if the service rejects the result.
 | `tests/Feature/Optimization/UpdateLoadClassTest.php` | Load class endpoint, validation, authorization |
 | `tests/Feature/Optimization/ApplyPlanTest.php` | Backup before write, restore on rejection, drift, rollback |
 | `tests/Feature/Optimization/AppliersTest.php` | Where each component writes, and what it leaves alone |
+| `tests/Feature/Optimization/VerifyAndDriftTest.php` | Whether a change took effect, and whether a file was edited since |
 | `tests/Unit/MysqlOptimizerTest.php` | Buffer pool sizing, IO capacity, MariaDB thread pool |
 | `tests/Unit/RedisOptimizerTest.php` | Memory ceiling, and the queue eviction guardrail |
 | `tests/Unit/ServerOptimizersTest.php` | nginx worker sizing, kernel values, container skip |
@@ -186,7 +187,7 @@ against a real server, and sanity-check the proposed values on staging.
 - [x] Drift detection — a file edited since the plan was drawn is not overwritten
 - [x] Queued jobs on the `ssh` queue, locked per server, so two applies on one
       machine queue behind each other rather than interleaving writes
-- [ ] Verify step after apply (re-probe and confirm the value took effect)
+- [x] Verify step after apply -- re-probes and records what the server reports
 
 ### Later phases
 

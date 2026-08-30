@@ -23,6 +23,7 @@ class OptimizationPlanResource extends JsonResource
             'budget' => $this->budget,
             'facts' => $this->facts,
             'ruleset_versions' => $this->ruleset_versions,
+            'verification' => $this->verification,
             'is_disruptive' => $this->isDisruptive(),
             'proposals' => OptimizationProposalResource::collection(
                 $this->whenLoaded('proposals')

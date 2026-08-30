@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $action
  * @property ?string $backup_content
  * @property ?string $backup_hash
+ * @property ?string $applied_hash
  * @property ?\Carbon\Carbon $applied_at
  * @property ?\Carbon\Carbon $reverted_at
  * @property OptimizationPlan $plan
@@ -37,6 +38,7 @@ class OptimizationChange extends AbstractModel
         'action',
         'backup_content',
         'backup_hash',
+        'applied_hash',
         'applied_at',
         'reverted_at',
     ];
