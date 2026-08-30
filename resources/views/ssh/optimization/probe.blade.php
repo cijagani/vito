@@ -54,18 +54,28 @@ echo "pg_data_directory:$(sudo -u postgres psql -tAc 'SHOW data_directory' 2>/de
 @if ($mysqlVersion)
 {{-- The full version string, since MariaDB and Percona identify themselves there
      and the settings they support differ from standard MySQL. --}}
-echo "mysql_version:$(mysql -N -B -e 'SELECT @@version' 2>/dev/null || echo '')"
+echo "mysql_version:$(sudo mysql -N -B -e 'SELECT @@version' 2>/dev/null || echo '')"
 @foreach (['innodb_buffer_pool_size', 'innodb_flush_method', 'innodb_log_file_size', 'innodb_log_buffer_size', 'innodb_io_capacity', 'innodb_io_capacity_max', 'innodb_file_per_table', 'max_connections', 'thread_cache_size', 'table_open_cache', 'skip_name_resolve', 'slow_query_log', 'long_query_time'] as $variable)
-echo "mysql_{{ $variable }}:$(mysql -N -B -e 'SELECT @@{{ $variable }}' 2>/dev/null || echo '')"
+echo "mysql_{{ $variable }}:$(sudo mysql -N -B -e 'SELECT @@{{ $variable }}' 2>/dev/null || echo '')"
 @endforeach
 @endif
 
 @if ($redisInstalled)
-echo "redis_version:$(redis-cli INFO server 2>/dev/null | awk -F: '/^redis_version:/{print $2}' | tr -d '\r' || echo '')"
-echo "redis_maxmemory:$(redis-cli CONFIG GET maxmemory 2>/dev/null | tail -n1 || echo '')"
-echo "redis_maxmemory_policy:$(redis-cli CONFIG GET maxmemory-policy 2>/dev/null | tail -n1 || echo '')"
-echo "redis_tcp_backlog:$(redis-cli CONFIG GET tcp-backlog 2>/dev/null | tail -n1 || echo '')"
-echo "redis_io_threads:$(redis-cli CONFIG GET io-threads 2>/dev/null | tail -n1 || echo '')"
+{{-- Redis may require a password, and it is not always in redis.conf -- a distro
+     or a provisioning tool can set it elsewhere. Prefer the client's own config
+     if one exists, so the probe does not need the secret itself. --}}
+REDIS_CLI="redis-cli"
+if [ -f /root/.rediscli_auth ]; then
+    REDIS_CLI="redis-cli -a $(sudo cat /root/.rediscli_auth 2>/dev/null) --no-auth-warning"
+elif sudo test -r /etc/redis/redis.conf; then
+    REDIS_PW=$(sudo grep -sE '^[[:space:]]*requirepass' /etc/redis/redis.conf | awk '{print $2}' | tr -d '"' | head -n1)
+    [ -n "$REDIS_PW" ] && REDIS_CLI="redis-cli -a $REDIS_PW --no-auth-warning"
+fi
+echo "redis_version:$($REDIS_CLI INFO server 2>/dev/null | awk -F: '/^redis_version:/{print $2}' | tr -d '\r' || echo '')"
+echo "redis_maxmemory:$($REDIS_CLI CONFIG GET maxmemory 2>/dev/null | tail -n1 || echo '')"
+echo "redis_maxmemory_policy:$($REDIS_CLI CONFIG GET maxmemory-policy 2>/dev/null | tail -n1 || echo '')"
+echo "redis_tcp_backlog:$($REDIS_CLI CONFIG GET tcp-backlog 2>/dev/null | tail -n1 || echo '')"
+echo "redis_io_threads:$($REDIS_CLI CONFIG GET io-threads 2>/dev/null | tail -n1 || echo '')"
 @endif
 
 {{-- Current kernel values, so a setting already correct is reported as such

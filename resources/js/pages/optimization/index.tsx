@@ -17,12 +17,12 @@ import ApplyActions from '@/pages/optimization/components/apply-actions';
 export default function Optimization() {
   const page = usePage<{
     server: Server;
-    plan: { data: OptimizationPlan } | null;
+    plan: OptimizationPlan | null;
     hasDatabase: boolean;
   }>();
 
   const [analyzing, setAnalyzing] = useState(false);
-  const plan = page.props.plan?.data;
+  const plan = page.props.plan;
 
   const analyze = () => {
     router.post(
@@ -94,7 +94,7 @@ export default function Optimization() {
             ) : (
               <div className="rounded-lg border border-dashed p-8 text-center">
                 <p className="text-muted-foreground text-sm">
-                  Nothing to propose for this server yet. Tuning currently covers PostgreSQL.
+                  Nothing to propose for this server. Every setting the optimizer checks is already correct.
                 </p>
               </div>
             )}

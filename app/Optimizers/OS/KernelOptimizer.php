@@ -45,6 +45,8 @@ class KernelOptimizer extends AbstractOptimizer
      */
     protected function currentValue(string $configKey, array $probe): ?string
     {
+        // fs.file-max keeps its hyphen once the dots become underscores, so the
+        // probe key is not simply the setting with every separator replaced.
         $value = $probe['sysctl_'.str_replace('.', '_', $configKey)] ?? null;
 
         return $value === null || $value === '' ? null : $value;

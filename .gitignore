@@ -39,3 +39,6 @@ opencode.json
 !.claude/agents/
 !.claude/commands/
 .opencode
+
+# Local SSH keys used for manual testing. Never commit private keys.
+/key
