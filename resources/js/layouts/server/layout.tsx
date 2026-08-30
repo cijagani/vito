@@ -9,6 +9,7 @@ import {
   CommandIcon,
   DatabaseIcon,
   FlameIcon,
+  GaugeIcon,
   GlobeIcon,
   HomeIcon,
   KeyIcon,
@@ -239,6 +240,12 @@ export default function ServerLayout({ children }: { children: ReactNode }) {
       title: 'Monitoring',
       href: route('monitoring', { server: page.props.server.id }),
       icon: ChartLineIcon,
+      isDisabled: isMenuDisabled,
+    },
+    {
+      title: 'Optimization',
+      href: route('optimization', { server: page.props.server.id }),
+      icon: GaugeIcon,
       isDisabled: isMenuDisabled,
     },
     {

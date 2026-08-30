@@ -66,6 +66,7 @@ use Throwable;
  * @property Collection<int, ServerIpAddress> $ipAddresses
  * @property Collection<int, CronJob> $cronJobs
  * @property Collection<int, Worker> $workers
+ * @property Collection<int, OptimizationPlan> $optimizationPlans
  * @property Collection<int, Backup> $backups
  * @property Collection<int, SshKey> $sshKeys
  * @property string $hostname
@@ -321,6 +322,14 @@ class Server extends AbstractModel
     public function workers(): HasMany
     {
         return $this->hasMany(Worker::class);
+    }
+
+    /**
+     * @return HasMany<OptimizationPlan, covariant $this>
+     */
+    public function optimizationPlans(): HasMany
+    {
+        return $this->hasMany(OptimizationPlan::class);
     }
 
     /**
