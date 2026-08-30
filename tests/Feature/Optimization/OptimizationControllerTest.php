@@ -134,6 +134,8 @@ test('applying a plan writes it to the server', function () {
     $this->post(route('optimization.apply', ['server' => $this->server, 'plan' => $plan]))
         ->assertRedirect();
 
+    // The test queue runs synchronously, so the plan has already been written by
+    // the time the redirect lands.
     expect($plan->refresh()->status->value)->toBe('applied');
 });
 

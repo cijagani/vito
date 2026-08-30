@@ -4,15 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Actions\Optimization\ApplyPlan;
 use App\Actions\Optimization\GeneratePlan;
-use App\Actions\Optimization\RollbackPlan;
 use App\Http\Resources\OptimizationPlanResource;
+use App\Jobs\Optimization\ApplyPlanJob;
+use App\Jobs\Optimization\RollbackPlanJob;
 use App\Models\OptimizationPlan;
 use App\Models\Server;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Throwable;
 use Spatie\RouteAttributes\Attributes\Get;
 use Spatie\RouteAttributes\Attributes\Middleware;
 use Spatie\RouteAttributes\Attributes\Post;
@@ -55,9 +55,7 @@ class OptimizationController extends Controller
     }
 
     /**
-     * Write the accepted proposals to the server.
-     *
-     * @throws Throwable
+     * Queue the accepted proposals to be written to the server.
      */
     #[Post('/{plan}/apply', name: 'optimization.apply')]
     public function apply(Request $request, Server $server, OptimizationPlan $plan, ApplyPlan $apply): RedirectResponse
@@ -65,25 +63,28 @@ class OptimizationController extends Controller
         $this->authorize('update', $plan);
         $this->ensureBelongsTo($plan, $server);
 
-        $apply->handle($plan, $request->input());
+        // Validated here so an unconfirmed restart, or a plan that has already run,
+        // is refused in front of the person asking rather than inside a job they
+        // would have to go looking for.
+        $apply->validate($plan, $request->input());
 
-        return back()->with('success', 'Optimization applied.');
+        dispatch(new ApplyPlanJob($plan, $request->input()))->onQueue('ssh');
+
+        return back()->with('success', 'Applying the optimization.');
     }
 
     /**
-     * Put the server back the way it was before this plan.
-     *
-     * @throws Throwable
+     * Queue putting the server back the way it was before this plan.
      */
     #[Post('/{plan}/rollback', name: 'optimization.rollback')]
-    public function rollback(Server $server, OptimizationPlan $plan, RollbackPlan $rollback): RedirectResponse
+    public function rollback(Server $server, OptimizationPlan $plan): RedirectResponse
     {
         $this->authorize('update', $plan);
         $this->ensureBelongsTo($plan, $server);
 
-        $rollback->handle($plan);
+        dispatch(new RollbackPlanJob($plan))->onQueue('ssh');
 
-        return back()->with('success', 'Optimization rolled back.');
+        return back()->with('success', 'Rolling back the optimization.');
     }
 
     #[Get('/{plan}', name: 'optimization.show')]

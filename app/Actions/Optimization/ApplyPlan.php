@@ -85,9 +85,12 @@ class ApplyPlan
     }
 
     /**
+     * Checked before the work is queued as well as before it runs, so a refusal
+     * reaches the person who asked rather than surfacing later in a failed job.
+     *
      * @param  array<string, mixed>  $input
      */
-    private function validate(OptimizationPlan $plan, array $input): void
+    public function validate(OptimizationPlan $plan, array $input): void
     {
         Validator::make($input, [
             // Applying a plan that restarts a service drops connections and any

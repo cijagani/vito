@@ -162,9 +162,8 @@ against a real server, and sanity-check the proposed values on staging.
 - [x] Restart refused without explicit confirmation; the dialog names what is dropped
 - [x] Rollback over the `optimization_changes` manifest, replayed in reverse
 - [x] Drift detection — a file edited since the plan was drawn is not overwritten
-- [ ] **Queued job (`UniqueQueue`)** — apply currently runs in the request. Two
-      concurrent applies on one server would race, and a slow SSH round trip holds
-      a web worker. This is the main gap.
+- [x] Queued jobs on the `ssh` queue, locked per server, so two applies on one
+      machine queue behind each other rather than interleaving writes
 - [ ] Verify step after apply (re-probe and confirm the value took effect)
 
 ### Later phases
