@@ -33,7 +33,10 @@ class VerifyPlan
 
         $results = [];
 
-        foreach ($plan->proposals()->where('accepted', true)->get() as $proposal) {
+        // Only what has actually been written. Reporting a pending proposal as
+        // "not applied" is true but useless -- it reads as a failure when nothing
+        // was attempted.
+        foreach ($plan->proposals()->where('accepted', true)->whereNotNull('applied_at')->get() as $proposal) {
             $results[] = $this->verify($proposal, $probe);
         }
 
@@ -107,6 +110,7 @@ class VerifyPlan
             'redis' => 'redis_'.str_replace('-', '_', $proposal->config_key),
             'nginx' => 'nginx_'.$proposal->config_key,
             'kernel' => 'sysctl_'.str_replace('.', '_', $proposal->config_key),
+            'php-fpm' => 'php_'.str_replace('.', '_', $proposal->config_key),
             default => null,
         };
 

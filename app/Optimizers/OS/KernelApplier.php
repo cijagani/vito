@@ -14,6 +14,11 @@ use App\Optimizers\ServerConfigApplier;
  */
 class KernelApplier extends ServerConfigApplier
 {
+    protected function component(): string
+    {
+        return 'kernel';
+    }
+
     protected function path(Server $server): ?string
     {
         return '/etc/sysctl.d/60-vito-tuning.conf';

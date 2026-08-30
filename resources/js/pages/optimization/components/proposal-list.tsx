@@ -36,7 +36,9 @@ function ProposalRow({ proposal }: { proposal: OptimizationProposal }) {
 
         <span className="min-w-0 flex-1 font-mono text-sm">{proposal.config_key}</span>
 
-        {proposal.is_change ? (
+        {proposal.applied_at ? (
+          <span className="font-mono text-sm font-medium">{proposal.proposed_value}</span>
+        ) : proposal.is_change ? (
           <span className="flex items-center gap-2 font-mono text-sm">
             <span className="text-muted-foreground line-through">{proposal.current_value ?? 'unset'}</span>
             <ArrowRightIcon className="text-muted-foreground size-3" />
@@ -49,9 +51,13 @@ function ProposalRow({ proposal }: { proposal: OptimizationProposal }) {
           </span>
         )}
 
-        {proposal.is_change && <Badge variant={proposal.severity_color}>{proposal.severity}</Badge>}
+        {proposal.applied_at && <Badge variant="success">applied</Badge>}
 
-        {proposal.is_disruptive && <Badge variant="outline">restart</Badge>}
+        {proposal.is_change && !proposal.applied_at && (
+          <Badge variant={proposal.severity_color}>{proposal.severity}</Badge>
+        )}
+
+        {proposal.is_disruptive && !proposal.applied_at && <Badge variant="outline">restart</Badge>}
       </button>
 
       {open && (
@@ -109,17 +115,16 @@ function GroupCard({
       <div className="bg-muted/40 flex items-center justify-between border-b px-4 py-2">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium">{label}</h3>
-          {pending.length > 0 && (
-            <span className="text-muted-foreground text-xs">
-              {pending.length} to change
-              {correct.length > 0 && `, ${correct.length} already correct`}
-            </span>
-          )}
-          {pending.length === 0 && (
-            <span className="text-muted-foreground text-xs">
-              {applied.length > 0 ? `${applied.length} applied` : 'nothing to change'}
-            </span>
-          )}
+
+          {applied.length > 0 && <Badge variant="success">applied</Badge>}
+
+          <span className="text-muted-foreground text-xs">
+            {pending.length > 0
+              ? `${pending.length} to change${correct.length > 0 ? `, ${correct.length} already correct` : ''}`
+              : applied.length > 0
+                ? `${applied.length} written${correct.length > 0 ? `, ${correct.length} already correct` : ''}`
+                : 'nothing to change'}
+          </span>
         </div>
 
         {pending.length > 0 && (

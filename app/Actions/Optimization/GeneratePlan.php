@@ -73,6 +73,14 @@ class GeneratePlan
         ];
 
         return DB::transaction(function () use ($server, $user, $facts, $budget, $proposals): OptimizationPlan {
+            // A draft nobody has applied is a stale reading, not history worth
+            // keeping, and leaving it behind is what makes the page show a plan
+            // the operator has already dealt with.
+            $server->optimizationPlans()
+                ->where('status', OptimizationPlanStatus::DRAFT)
+                ->whereDoesntHave('proposals', fn ($query) => $query->whereNotNull('applied_at'))
+                ->delete();
+
             $plan = OptimizationPlan::query()->create([
                 'server_id' => $server->id,
                 'user_id' => $user?->id,

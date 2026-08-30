@@ -13,7 +13,6 @@ use App\Optimizers\OS\KernelApplier;
 use App\Optimizers\PHP\FpmApplier;
 use App\Optimizers\Redis\RedisApplier;
 use App\Optimizers\Webserver\NginxApplier;
-use App\Optimizers\Webserver\NginxContextApplier;
 use App\Services\Database\Mariadb;
 use App\Services\Database\Mysql;
 use Illuminate\Support\Collection;
@@ -34,7 +33,6 @@ class ApplyPlan
         private readonly MysqlApplier $mysql = new MysqlApplier,
         private readonly FpmApplier $fpm = new FpmApplier,
         private readonly NginxApplier $nginx = new NginxApplier,
-        private readonly NginxContextApplier $nginxContext = new NginxContextApplier,
         private readonly KernelApplier $kernel = new KernelApplier,
         private readonly RedisApplier $redis = new RedisApplier,
         private readonly VerifyPlan $verify = new VerifyPlan,
@@ -53,6 +51,10 @@ class ApplyPlan
 
         $plan->status = OptimizationPlanStatus::APPLYING;
         $plan->save();
+
+        // Remembered so a failure can undo this run without reverting changes an
+        // earlier run made.
+        $writtenBefore = $plan->changes()->pluck('id')->all();
 
         try {
             $accepted = $plan->proposals()
@@ -76,7 +78,6 @@ class ApplyPlan
             $this->mysql->apply($plan, $mysql);
             $this->fpm->apply($plan, $fpm);
             $this->nginx->apply($plan, $nginx);
-            $this->nginxContext->apply($plan, $nginx);
             $this->kernel->apply($plan, $kernel);
             $this->redis->apply($plan, $redis);
 
@@ -114,11 +115,17 @@ class ApplyPlan
                 $this->reloadUnit($plan, 'redis-server', true);
             }
         } catch (Throwable $exception) {
-            // Anything already written is put back, so a partial apply never
-            // leaves the server in a state nobody planned for.
-            $this->rollback->handle($plan);
+            // Undo only what this run wrote. Rolling the whole plan back would
+            // also revert groups applied successfully earlier, which the operator
+            // did not ask for and has no way to anticipate.
+            $this->rollback->handle($plan, $writtenBefore);
 
-            $plan->status = OptimizationPlanStatus::FAILED;
+            // The plan stays open. One group failing says nothing about the
+            // others, and locking the whole plan leaves an operator with a
+            // half-tuned server and no way forward.
+            $plan->status = $this->hasRemainingWork($plan)
+                ? OptimizationPlanStatus::DRAFT
+                : OptimizationPlanStatus::APPLIED;
             $plan->save();
 
             throw $exception;

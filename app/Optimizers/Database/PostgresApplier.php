@@ -50,6 +50,7 @@ class PostgresApplier
             path: $path,
             content: $this->render($proposals),
             validate: fn () => $this->validate($server, $version),
+            component: 'postgresql',
         );
     }
 

@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * @property int $optimization_plan_id
  * @property string $target_path
+ * @property ?string $component
  * @property string $action
  * @property ?string $backup_content
  * @property ?string $backup_hash

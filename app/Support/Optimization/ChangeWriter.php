@@ -34,6 +34,7 @@ class ChangeWriter
         string $content,
         callable $validate,
         ?string $expectedHash = null,
+        ?string $component = null,
     ): OptimizationChange {
         $server = $plan->server;
 
@@ -54,6 +55,7 @@ class ChangeWriter
 
         $change = $plan->changes()->create([
             'target_path' => $path,
+            'component' => $component,
             'action' => $existing === null
                 ? OptimizationChange::ACTION_CREATED
                 : OptimizationChange::ACTION_MODIFIED,

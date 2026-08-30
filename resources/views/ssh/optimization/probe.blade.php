@@ -39,6 +39,15 @@ echo "fpm_avg_rss_mb:$(
 )"
 echo "fpm_active_children:$(pgrep -c 'php-fpm' 2>/dev/null || echo 0)"
 
+{{-- OPcache as the FPM pool will load it. php -i under the fpm SAPI is not
+     available, so the value is read from the ini files that SAPI reads -- the CLI
+     has its own conf.d and would report a different number entirely.
+
+     Dots are not valid in a probe key, so each is written with an underscore. --}}
+@foreach (['opcache.memory_consumption', 'opcache.max_accelerated_files', 'opcache.interned_strings_buffer', 'opcache.jit_buffer_size'] as $ini)
+echo "php_{{ str_replace('.', '_', $ini) }}:$(sudo sh -c 'grep -shE "^[[:space:]]*{{ $ini }}[[:space:]]*=" /etc/php/*/fpm/conf.d/*.ini /etc/php/*/fpm/php.ini' 2>/dev/null | tail -n1 | sed -E 's/.*=[[:space:]]*//' | tr -d '')"
+@endforeach
+
 @if ($postgresVersion)
 {{-- Asked of the running server rather than read from the file, so the value
      reflects what is actually in force including any drop-in overrides. --}}

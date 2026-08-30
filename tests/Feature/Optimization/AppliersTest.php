@@ -5,7 +5,6 @@ use App\Models\OptimizationPlan;
 use App\Optimizers\OS\KernelApplier;
 use App\Optimizers\PHP\FpmApplier;
 use App\Optimizers\Webserver\NginxApplier;
-use App\Optimizers\Webserver\NginxContextApplier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -35,75 +34,6 @@ function applierPlan(array $proposals): OptimizationPlan
 
     return $plan->load('proposals');
 }
-
-test('nginx http settings go into a managed drop-in', function () {
-    SSH::fake('VITO_CONFIG_OK');
-
-    $plan = applierPlan([
-        ['component' => 'nginx', 'config_key' => 'gzip', 'proposed_value' => 'on'],
-        ['component' => 'nginx', 'config_key' => 'client_max_body_size', 'proposed_value' => '64m'],
-    ]);
-
-    (new NginxApplier)->apply($plan, $plan->proposals);
-
-    expect($plan->changes()->first()->target_path)->toBe('/etc/nginx/conf.d/zz-vito-tuning.conf');
-
-    // nginx directives end in a semicolon, not an equals sign.
-    expect(SSH::getUploadedContent())
-        ->toContain('gzip on;')
-        ->toContain('client_max_body_size 64m;');
-});
-
-test('worker directives are kept out of the drop-in', function () {
-    // conf.d is included from inside http{}, so worker_processes there would make
-    // nginx refuse to start.
-    SSH::fake('VITO_CONFIG_OK');
-
-    $plan = applierPlan([
-        ['component' => 'nginx', 'config_key' => 'worker_processes', 'proposed_value' => '4'],
-        ['component' => 'nginx', 'config_key' => 'gzip', 'proposed_value' => 'on'],
-    ]);
-
-    (new NginxApplier)->apply($plan, $plan->proposals);
-
-    expect(SSH::getUploadedContent())
-        ->not->toContain('worker_processes')
-        ->toContain('gzip on;');
-});
-
-test('worker directives are edited in place in nginx.conf', function () {
-    SSH::fake("user www-data;\nworker_processes 1;\nevents {\n    worker_connections 768;\n}\n# VITO_CONFIG_OK\n");
-
-    $plan = applierPlan([
-        ['component' => 'nginx', 'config_key' => 'worker_processes', 'proposed_value' => '4'],
-        ['component' => 'nginx', 'config_key' => 'worker_connections', 'proposed_value' => '8192'],
-    ]);
-
-    (new NginxContextApplier)->apply($plan, $plan->proposals);
-
-    $written = SSH::getUploadedContent();
-
-    expect($written)
-        ->toContain('worker_processes 4;')
-        ->toContain('worker_connections 8192;')
-        // Everything else in the file survives.
-        ->toContain('user www-data;')
-        ->toContain('events {');
-});
-
-test('a worker directive that is absent is not appended', function () {
-    // Appending worker_connections would land it outside events{}, where nginx
-    // rejects it -- a config that fails to load is worse than a default one.
-    SSH::fake("user www-data;\nworker_processes 1;\n# VITO_CONFIG_OK\n");
-
-    $plan = applierPlan([
-        ['component' => 'nginx', 'config_key' => 'worker_connections', 'proposed_value' => '8192'],
-    ]);
-
-    (new NginxContextApplier)->apply($plan, $plan->proposals);
-
-    expect(SSH::getUploadedContent())->not->toContain('worker_connections');
-});
 
 test('kernel settings are written where they survive a reboot', function () {
     SSH::fake('VITO_CONFIG_OK');
@@ -169,6 +99,52 @@ test('a pool for a site that is not on this server is skipped', function () {
     ]);
 
     (new FpmApplier)->apply($plan, $plan->proposals);
+
+    expect($plan->changes()->count())->toBe(0);
+});
+
+test('nginx changes a directive where it already lives', function () {
+    // The fake answers every command with this, so it stands in for both the
+    // located file and the file's contents. The locate step reports nginx.conf.
+    SSH::fake("keepalive_timeout:/etc/nginx/nginx.conf\nkeepalive_timeout 65;\nVITO_CONFIG_OK\n");
+
+    $plan = applierPlan([
+        ['component' => 'nginx', 'config_key' => 'keepalive_timeout', 'proposed_value' => '30'],
+    ]);
+
+    (new NginxApplier)->apply($plan, $plan->proposals);
+
+    // Rewritten in the file that already declared it, not restated in a drop-in.
+    // Restating it is what nginx rejects as a duplicate directive.
+    expect($plan->changes()->first()?->target_path)->toBe('/etc/nginx/nginx.conf')
+        ->and(SSH::getUploadedContent())->toContain('keepalive_timeout 30;')
+        ->and(SSH::getUploadedContent())->not->toContain('keepalive_timeout 65;');
+});
+
+test('nginx adds a directive that exists nowhere to its own file', function () {
+    SSH::fake("client_max_body_size:none\nVITO_CONFIG_OK\n");
+
+    $plan = applierPlan([
+        ['component' => 'nginx', 'config_key' => 'client_max_body_size', 'proposed_value' => '64m'],
+    ]);
+
+    (new NginxApplier)->apply($plan, $plan->proposals);
+
+    expect($plan->changes()->first()?->target_path)->toBe('/etc/nginx/conf.d/zz-vito-tuning.conf')
+        ->and(SSH::getUploadedContent())->toContain('client_max_body_size 64m;');
+});
+
+test('a worker directive that exists nowhere is not added to the drop-in', function () {
+    // conf.d is included from inside http, so worker_processes there would stop
+    // nginx starting -- a configuration that fails to load is worse than a
+    // default one.
+    SSH::fake("worker_processes:none\nVITO_CONFIG_OK\n");
+
+    $plan = applierPlan([
+        ['component' => 'nginx', 'config_key' => 'worker_processes', 'proposed_value' => '4'],
+    ]);
+
+    (new NginxApplier)->apply($plan, $plan->proposals);
 
     expect($plan->changes()->count())->toBe(0);
 });

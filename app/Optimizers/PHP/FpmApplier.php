@@ -68,6 +68,7 @@ class FpmApplier
             path: "/etc/php/{$version}/fpm/conf.d/".self::MANAGED_INI,
             content: $this->renderIni($opcache),
             validate: fn () => $this->validate($server, $version),
+            component: 'php-fpm',
         );
     }
 
@@ -109,6 +110,7 @@ class FpmApplier
                 path: $path,
                 content: $this->rewritePool($existing, $poolProposals),
                 validate: fn () => $this->validate($server, $version),
+                component: 'php-fpm',
             );
         }
     }

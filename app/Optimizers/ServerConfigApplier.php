@@ -26,6 +26,12 @@ abstract class ServerConfigApplier
 
     abstract protected function validateCommand(Server $server): string;
 
+    /**
+     * Which group this applier writes for, so a rollback knows which proposals to
+     * reopen.
+     */
+    abstract protected function component(): string;
+
     protected function commentPrefix(): string
     {
         return '#';
@@ -58,6 +64,7 @@ abstract class ServerConfigApplier
             path: $path,
             content: $this->render($proposals),
             validate: fn () => $this->validate($plan->server),
+            component: $this->component(),
         );
     }
 
@@ -91,9 +98,11 @@ abstract class ServerConfigApplier
      */
     protected function validate(Server $server): void
     {
+        // The component, not the class name: a fully qualified name carries
+        // backslashes, which do not belong in a log file name.
         $output = $server->ssh()->exec(
             $this->validateCommand($server),
-            'optimization-validate-'.static::class,
+            'optimization-validate-'.$this->component(),
         );
 
         if (! str_contains($output, 'VITO_CONFIG_OK')) {

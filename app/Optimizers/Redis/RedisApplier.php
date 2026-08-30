@@ -52,6 +52,7 @@ class RedisApplier
             // accept the values instead. A rejected value throws here and the file
             // is restored, exactly as a failed parse would be elsewhere.
             validate: fn () => $this->applyLive($server, $proposals),
+            component: 'redis',
         );
     }
 

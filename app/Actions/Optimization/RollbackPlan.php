@@ -21,13 +21,17 @@ class RollbackPlan
     public function __construct(private readonly ChangeWriter $writer = new ChangeWriter) {}
 
     /**
+     * @param  array<int, int>  $except  changes to leave alone, so undoing a failed
+     *                                   run does not revert groups applied earlier
+     *
      * @throws SSHError
      * @throws Throwable
      */
-    public function handle(OptimizationPlan $plan): OptimizationPlan
+    public function handle(OptimizationPlan $plan, array $except = []): OptimizationPlan
     {
         $changes = $plan->changes()
             ->whereNull('reverted_at')
+            ->when($except !== [], fn ($query) => $query->whereNotIn('id', $except))
             ->orderByDesc('id')
             ->get();
 
@@ -39,11 +43,33 @@ class RollbackPlan
             $this->reload($plan);
         }
 
-        $plan->status = OptimizationPlanStatus::ROLLED_BACK;
-        $plan->rolled_back_at = now();
-        $plan->save();
+        // A partial rollback leaves the plan as it was: only undoing everything
+        // means the plan itself has been rolled back.
+        if ($except === []) {
+            $plan->status = OptimizationPlanStatus::ROLLED_BACK;
+            $plan->rolled_back_at = now();
+            $plan->save();
+        }
+
+        // A proposal whose file has been restored is no longer applied, so it
+        // becomes offerable again. Left marked, the panel would claim a setting is
+        // in force that was just undone.
+        if ($changes->isNotEmpty()) {
+            $plan->proposals()
+                ->whereIn('component', $this->componentsOf($changes))
+                ->update(['applied_at' => null]);
+        }
 
         return $plan;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\OptimizationChange>  $changes
+     * @return array<int, string>
+     */
+    private function componentsOf($changes): array
+    {
+        return $changes->pluck('component')->filter()->unique()->values()->all();
     }
 
     /**

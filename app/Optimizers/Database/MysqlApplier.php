@@ -47,6 +47,7 @@ class MysqlApplier
             path: $path,
             content: $this->render($proposals),
             validate: fn () => $this->validate($server),
+            component: 'mysql',
         );
     }
 

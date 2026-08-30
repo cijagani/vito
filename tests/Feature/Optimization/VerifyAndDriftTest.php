@@ -31,6 +31,9 @@ function verifyPlanWith(array $proposals): OptimizationPlan
             'apply_method' => 'reload',
             'rationale' => 'derived from this machine',
             'accepted' => true,
+            // Verification reports only what was written; a pending proposal has
+            // nothing to check yet.
+            'applied_at' => now(),
         ], $proposal));
     }
 
