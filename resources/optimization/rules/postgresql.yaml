@@ -1,0 +1,141 @@
+##
+# PostgreSQL tuning rules.
+#
+# Every value derives from facts measured on the target machine — never copied
+# from another server. `formula` is evaluated by App\Support\Optimization\FormulaEvaluator
+# against the ServerFacts/Budget variables listed in the loader.
+#
+# `apply` is the blast radius, and it is data rather than a comment: `restart`
+# drops every open connection, so the UI must confirm it explicitly.
+#
+# A rule may narrow itself to part of the supported range with `min_version` /
+# `max_version` (max is exclusive) when a setting only exists, or only behaves as
+# described, on some versions. Comparison walks the numeric parts, so "16" and
+# "16.4" both mean what they say.
+##
+component: postgresql
+ruleset_version: 1
+
+applies_to:
+  service: postgresql
+  versions: ['15', '16', '17', '18']
+
+# The whole component is skipped when the database lives on another machine —
+# its RAM is budgeted there, and postgresql.conf here belongs to nothing.
+guardrails:
+  - id: pg-skip-when-remote
+    when: db_local_is_false
+    action: skip_component
+    message: 'The database is remote, so its memory is budgeted on that machine.'
+
+rules:
+  - key: shared_buffers
+    formula: 'db_buffer_mb * 0.80'
+    unit: MB
+    bounds:
+      min: 128
+      max_formula: 'total_ram_mb * 0.40'
+    apply: restart
+    severity_if_default: high
+    default_hint: '128MB'
+    why: |
+      PostgreSQL's own page cache. The packaged default of 128MB bears no relation
+      to the machine's memory and is the most common misconfiguration in this
+      stack. Deliberately not the entire database reserve — PostgreSQL also needs
+      work_mem, maintenance_work_mem and per-connection memory from the same slice.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: effective_cache_size
+    formula: 'total_ram_mb * 0.55'
+    unit: MB
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Not an allocation — a hint to the query planner about how much memory
+      (PostgreSQL plus the OS page cache) is realistically available for caching,
+      so it favours index scans over sequential ones. Setting it too low produces
+      slow plans, not memory pressure.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: max_connections
+    formula: 'max_connections_target'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Kept modest on purpose. With PgBouncer in front, the application multiplexes
+      many client connections onto a small server-side pool, so a high value here
+      buys nothing and multiplies the worst case for work_mem.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: work_mem
+    formula: '(total_ram_mb * 0.25) / max_connections_target'
+    unit: MB
+    bounds:
+      min: 4
+    apply: reload
+    severity_if_default: high
+    why: |
+      Allocated per sort or hash operation, and a single query can use several at
+      once across many connections — so it multiplies by connection count rather
+      than being a flat cost. Budgeting a quarter of memory as the envelope for all
+      sorting and dividing by max_connections bounds the worst case. This is the
+      most common cause of PostgreSQL running the machine out of memory.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: maintenance_work_mem
+    value: '256MB'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Used by VACUUM, CREATE INDEX and ALTER TABLE. Only a few run concurrently,
+      so it is safe for this to be far larger than work_mem.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: wal_buffers
+    value: '64MB'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Write-ahead log staging. The default derives from shared_buffers and lands
+      too small for write-heavy workloads.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: checkpoint_completion_target
+    value: '0.9'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Spreads checkpoint writes across almost the whole interval instead of
+      flushing them in a burst, which is what turns a checkpoint into a latency
+      spike visible to users.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: default_statistics_target
+    value: '100'
+    apply: reload
+    severity_if_default: low
+    why: |
+      How much distribution detail ANALYZE collects. More statistics means better
+      plans on skewed data, at the cost of slightly slower ANALYZE.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: random_page_cost
+    value: '1.1'
+    value_when_rotational: '4.0'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Tells the planner how much more expensive a random read is than a sequential
+      one. The default of 4.0 assumes a spinning disk; on SSD or NVMe it wrongly
+      discourages index scans.
+    kb_ref: OPTIMIZATION_V2/12-STORAGE-FILESYSTEM-AND-IO.md
+
+  - key: effective_io_concurrency
+    value: '200'
+    value_when_rotational: '2'
+    apply: reload
+    severity_if_default: low
+    why: |
+      How many concurrent I/O requests the storage can usefully service. Flash
+      storage handles many; a spinning disk handles very few.
+    kb_ref: OPTIMIZATION_V2/12-STORAGE-FILESYSTEM-AND-IO.md

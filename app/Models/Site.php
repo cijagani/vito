@@ -6,6 +6,7 @@ use App\Enums\DeploymentStatus;
 use App\Enums\HostedDomainStatus;
 use App\Enums\HostedDomainType;
 use App\Enums\RedirectStatus;
+use App\Enums\SiteLoadClass;
 use App\Enums\SiteStatus;
 use App\Enums\SslStatus;
 use App\Enums\WorkerStatus;
@@ -47,6 +48,7 @@ use RuntimeException;
  * @property string $web_directory
  * @property string $path
  * @property string $php_version
+ * @property SiteLoadClass $load_class
  * @property string $source_control
  * @property int $source_control_id
  * @property string $repository
@@ -101,6 +103,7 @@ class Site extends AbstractModel
         'web_directory',
         'path',
         'php_version',
+        'load_class',
         'source_control',
         'source_control_id',
         'repository',
@@ -133,6 +136,7 @@ class Site extends AbstractModel
         'ssl_enabled' => 'boolean',
         'vhost_generation_enabled' => 'boolean',
         'status' => SiteStatus::class,
+        'load_class' => SiteLoadClass::class,
     ];
 
     public static function boot(): void
