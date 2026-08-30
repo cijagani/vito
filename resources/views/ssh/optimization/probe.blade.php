@@ -42,6 +42,7 @@ echo "fpm_active_children:$(pgrep -c 'php-fpm' 2>/dev/null || echo 0)"
 @if ($postgresVersion)
 {{-- Asked of the running server rather than read from the file, so the value
      reflects what is actually in force including any drop-in overrides. --}}
+echo "pg_version:$(sudo -u postgres psql -tAc 'SHOW server_version' 2>/dev/null | awk '{print $1}' || echo '')"
 echo "pg_shared_buffers:$(sudo -u postgres psql -tAc 'SHOW shared_buffers' 2>/dev/null || echo '')"
 echo "pg_work_mem:$(sudo -u postgres psql -tAc 'SHOW work_mem' 2>/dev/null || echo '')"
 echo "pg_max_connections:$(sudo -u postgres psql -tAc 'SHOW max_connections' 2>/dev/null || echo '')"

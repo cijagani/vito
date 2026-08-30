@@ -27,8 +27,34 @@ class Probe
      */
     public function handle(Server $server): ServerFacts
     {
+        return $this->facts($server, $this->parse($this->run($server)));
+    }
+
+    /**
+     * The typed facts plus the raw probe values.
+     *
+     * Optimizers need both: the budget is computed from the facts, while the
+     * value currently in force for a given setting only exists in the raw output.
+     *
+     * @return array{facts: ServerFacts, probe: array<string, string>}
+     *
+     * @throws SSHError
+     */
+    public function withProbe(Server $server): array
+    {
         $values = $this->parse($this->run($server));
 
+        return [
+            'facts' => $this->facts($server, $values),
+            'probe' => $values,
+        ];
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private function facts(Server $server, array $values): ServerFacts
+    {
         return new ServerFacts(
             totalRamMb: (int) ($values['total_ram_mb'] ?? 0),
             cores: max(1, (int) ($values['cores'] ?? 1)),
