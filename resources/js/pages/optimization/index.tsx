@@ -13,6 +13,7 @@ import { OptimizationPlan } from '@/types/optimization';
 import BudgetBar from '@/pages/optimization/components/budget-bar';
 import ProposalList from '@/pages/optimization/components/proposal-list';
 import ApplyActions from '@/pages/optimization/components/apply-actions';
+import VerificationPanel from '@/pages/optimization/components/verification-panel';
 
 export default function Optimization() {
   const page = usePage<{
@@ -89,8 +90,10 @@ export default function Optimization() {
               </Alert>
             )}
 
+            <VerificationPanel plan={plan} />
+
             {plan.proposals && plan.proposals.length > 0 ? (
-              <ProposalList proposals={plan.proposals} />
+              <ProposalList server={page.props.server} plan={plan} proposals={plan.proposals} />
             ) : (
               <div className="rounded-lg border border-dashed p-8 text-center">
                 <p className="text-muted-foreground text-sm">

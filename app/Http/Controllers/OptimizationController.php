@@ -73,7 +73,10 @@ class OptimizationController extends Controller
 
         dispatch(new ApplyPlanJob($plan, $request->input()))->onQueue('ssh');
 
-        return back()->with('success', 'Applying the optimization.');
+        // Deliberately not "applied": on a queued setup the work has only been
+        // handed off, and claiming success before the server has answered is how
+        // an operator ends up trusting a change that never took effect.
+        return back()->with('success', 'Applying, then checking what the server reports back.');
     }
 
     /**
@@ -87,7 +90,7 @@ class OptimizationController extends Controller
 
         dispatch(new RollbackPlanJob($plan))->onQueue('ssh');
 
-        return back()->with('success', 'Rolling back the optimization.');
+        return back()->with('success', 'Rolling back to the configuration found before this plan.');
     }
 
     /**

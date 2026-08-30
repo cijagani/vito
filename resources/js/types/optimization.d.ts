@@ -45,6 +45,15 @@ export interface OptimizationProposal {
   is_change: boolean;
 }
 
+export interface VerificationResult {
+  component: string;
+  config_key: string;
+  expected: string;
+  actual: string | null;
+  status: 'pass' | 'fail' | 'unknown';
+  note: string | null;
+}
+
 export interface OptimizationPlan {
   id: number;
   server_id: number;
@@ -54,6 +63,7 @@ export interface OptimizationPlan {
   budget: OptimizationBudget | null;
   facts: OptimizationFacts | null;
   ruleset_versions: Record<string, number> | null;
+  verification: VerificationResult[] | null;
   is_disruptive: boolean;
   proposals?: OptimizationProposal[];
   created_at: string;

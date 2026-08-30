@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?string $kb_ref
  * @property bool $clamped
  * @property bool $accepted
+ * @property ?\Carbon\Carbon $applied_at
  * @property OptimizationPlan $plan
  */
 class OptimizationProposal extends AbstractModel

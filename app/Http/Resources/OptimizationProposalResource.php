@@ -30,6 +30,7 @@ class OptimizationProposalResource extends JsonResource
             'clamped' => $this->clamped,
             'accepted' => $this->accepted,
             'is_change' => $this->isChange(),
+            'applied_at' => $this->applied_at,
         ];
     }
 }

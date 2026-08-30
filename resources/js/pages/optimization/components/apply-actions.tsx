@@ -7,7 +7,8 @@ import { RotateCcwIcon } from 'lucide-react';
 export default function ApplyActions({ server, plan }: { server: Server; plan: OptimizationPlan }) {
   const dialog = useDialog();
 
-  const changes = (plan.proposals ?? []).filter((proposal) => proposal.accepted);
+  // Only work still outstanding: a group already applied is not offered again.
+  const changes = (plan.proposals ?? []).filter((proposal) => proposal.accepted && !proposal.applied_at);
   const restarts = changes.filter((proposal) => proposal.is_disruptive);
 
   const confirmApply = () => {
@@ -39,22 +40,25 @@ export default function ApplyActions({ server, plan }: { server: Server; plan: O
     });
   };
 
-  if (plan.status === 'applied') {
-    return (
-      <Button variant="outline" onClick={confirmRollback}>
-        <RotateCcwIcon />
-        Roll back
-      </Button>
-    );
-  }
+  // Rollback is offered as soon as anything has been written, not only when the
+  // whole plan is done -- a group applied on its own is still something to undo.
+  // Both buttons can show at once: applying one group leaves the others open.
+  const hasApplied = (plan.proposals ?? []).some((proposal) => proposal.applied_at);
+  const canApply = plan.status === 'draft' && changes.length > 0;
 
-  if (plan.status !== 'draft' || changes.length === 0) {
+  if (!hasApplied && !canApply) {
     return null;
   }
 
   return (
-    <Button onClick={confirmApply}>
-      Apply {changes.length} change{changes.length === 1 ? '' : 's'}
-    </Button>
+    <div className="flex items-center gap-2">
+      {hasApplied && (
+        <Button variant="outline" onClick={confirmRollback}>
+          <RotateCcwIcon />
+          Roll back
+        </Button>
+      )}
+      {canApply && <Button onClick={confirmApply}>Apply all {changes.length}</Button>}
+    </div>
   );
 }

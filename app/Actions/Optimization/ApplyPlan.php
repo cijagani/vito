@@ -55,7 +55,15 @@ class ApplyPlan
         $plan->save();
 
         try {
-            $accepted = $plan->proposals()->where('accepted', true)->get();
+            $accepted = $plan->proposals()
+                ->where('accepted', true)
+                // Applying one group at a time is the normal way to use this:
+                // change PHP-FPM, watch the box, then decide about the database.
+                ->when(
+                    $input['components'] ?? null,
+                    fn ($query, array $components) => $query->whereIn('component', $components)
+                )
+                ->get();
 
             $database = $accepted->where('component', 'postgresql');
             $mysql = $accepted->where('component', 'mysql');
@@ -116,12 +124,56 @@ class ApplyPlan
             throw $exception;
         }
 
-        $plan->status = OptimizationPlanStatus::APPLIED;
+        // Mark what was just written, so a later run can tell which groups are
+        // still outstanding.
+        $plan->proposals()
+            ->whereIn('id', $accepted->pluck('id'))
+            ->update(['applied_at' => now()]);
+
+        // Applying one group leaves the rest of the plan open, otherwise the first
+        // group applied would make every other group unappliable.
+        $plan->status = $this->hasRemainingWork($plan)
+            ? OptimizationPlanStatus::DRAFT
+            : OptimizationPlanStatus::APPLIED;
+
         $plan->applied_at = now();
         $plan->verification = $this->verifyQuietly($plan);
         $plan->save();
 
         return $plan;
+    }
+
+    /**
+     * Whether the groups being applied would restart a service.
+     *
+     * Asked of the selection rather than the whole plan: applying only nginx
+     * should not demand confirmation because a database setting elsewhere in the
+     * plan happens to need a restart.
+     *
+     * @param  array<string, mixed>  $input
+     */
+    private function isDisruptive(OptimizationPlan $plan, array $input): bool
+    {
+        return $plan->proposals()
+            ->where('accepted', true)
+            ->whereNull('applied_at')
+            ->when(
+                $input['components'] ?? null,
+                fn ($query, array $components) => $query->whereIn('component', $components)
+            )
+            ->where('apply_method', ApplyMethod::RESTART->value)
+            ->exists();
+    }
+
+    /**
+     * Whether any accepted proposal in this plan has still not been written.
+     */
+    private function hasRemainingWork(OptimizationPlan $plan): bool
+    {
+        return $plan->proposals()
+            ->where('accepted', true)
+            ->whereNull('applied_at')
+            ->exists();
     }
 
     /**
@@ -228,7 +280,9 @@ class ApplyPlan
         Validator::make($input, [
             // Applying a plan that restarts a service drops connections and any
             // in-flight request, so the caller has to say it meant to.
-            'confirmed' => [$plan->isDisruptive() ? 'accepted' : 'nullable'],
+            'confirmed' => [$this->isDisruptive($plan, $input) ? 'accepted' : 'nullable'],
+            'components' => ['sometimes', 'array'],
+            'components.*' => ['string'],
         ], [
             'confirmed.accepted' => 'This plan restarts a service, which drops open connections.',
         ])->validate();
