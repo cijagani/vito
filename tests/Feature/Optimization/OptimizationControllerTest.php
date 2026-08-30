@@ -111,3 +111,65 @@ test('the plan payload carries no server credentials', function () {
         expect($payload)->not->toContain($forbidden);
     }
 });
+
+test('applying a plan writes it to the server', function () {
+    SSH::fake('VITO_CONFIG_OK');
+
+    $plan = OptimizationPlan::query()->create([
+        'server_id' => $this->server->id,
+        'status' => 'draft',
+        'source' => 'engine',
+    ]);
+    $plan->proposals()->create([
+        'component' => 'postgresql',
+        'config_key' => 'work_mem',
+        'current_value' => '4MB',
+        'proposed_value' => '41MB',
+        'severity' => 'high',
+        'apply_method' => 'reload',
+        'rationale' => 'per sort operation',
+        'accepted' => true,
+    ]);
+
+    $this->post(route('optimization.apply', ['server' => $this->server, 'plan' => $plan]))
+        ->assertRedirect();
+
+    expect($plan->refresh()->status->value)->toBe('applied');
+});
+
+test('a plan cannot be applied through another server url', function () {
+    SSH::fake('VITO_CONFIG_OK');
+
+    $other = Server::factory()->create([
+        'user_id' => $this->user->id,
+        'project_id' => $this->user->current_project_id,
+    ]);
+
+    $plan = OptimizationPlan::query()->create([
+        'server_id' => $other->id,
+        'status' => 'draft',
+        'source' => 'engine',
+    ]);
+
+    $this->post(route('optimization.apply', ['server' => $this->server, 'plan' => $plan]))
+        ->assertNotFound();
+
+    expect($plan->refresh()->status->value)->toBe('draft');
+});
+
+test('a user outside the project cannot apply a plan', function () {
+    SSH::fake('VITO_CONFIG_OK');
+
+    $plan = OptimizationPlan::query()->create([
+        'server_id' => $this->server->id,
+        'status' => 'draft',
+        'source' => 'engine',
+    ]);
+
+    $this->actingAs(App\Models\User::factory()->create());
+
+    $this->post(route('optimization.apply', ['server' => $this->server, 'plan' => $plan]))
+        ->assertForbidden();
+
+    expect($plan->refresh()->status->value)->toBe('draft');
+});

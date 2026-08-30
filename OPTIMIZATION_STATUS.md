@@ -12,16 +12,16 @@
 | --- | --- | --- |
 | **0** | Budget engine, rule format, probe | **Done** |
 | **1** | Read-only analysis, UI, per-site FPM sizing | **Done** (untested in a browser) |
-| **2** | Apply + rollback (PostgreSQL) | Not started |
+| **2** | Apply + rollback (PostgreSQL) | **Done** (never run against a real server) |
 | **3** | MySQL / MariaDB | Not started |
 | **4** | PHP-FPM apply | Not started |
 | **5** | nginx · OS · Redis | Not started |
 | **6** | Verify + drift detection | Not started |
 | **7** | AI advisor | Not started |
 
-**Nothing written so far modifies a server.** Analysis reads configuration over SSH
-and records what should change. A test asserts the run issues no `ALTER SYSTEM` and
-no `systemctl restart`.
+**Analysis still modifies nothing** — a test asserts it issues no `ALTER SYSTEM` and no
+`systemctl restart`. Applying a plan does write, through a single path that records the
+original first and restores it if the service rejects the result.
 
 ---
 
@@ -128,11 +128,17 @@ shell in `probe.blade.php` is the least-tested code in the project — particula
 - `fpm_avg_rss_mb` when several pools run at once
 - `sudo -u postgres psql` where the socket or peer auth differs
 
-### 3. The proposed values themselves
+### 3. The proposed values, and applying them
 
 The formulas are ported from the 360 toolkit and unit-tested, but no proposal has
 been applied to a real database. Run an analysis against a staging server and check
 the numbers look right for that hardware before trusting them.
+
+**Apply and rollback have never touched a real machine.** The write path is covered by
+tests against a fake, which proves the ordering — back up, write, validate, restore on
+failure — but not that `postgres -C` behaves as expected on a real install, nor that
+the drop-in path is right for every packaging. Try it on a staging database first, and
+roll it back, before using it anywhere that matters.
 
 ### 4. The load class selector has not been clicked
 
@@ -148,20 +154,18 @@ and validation are tested, but the dialog itself has never been rendered.
 Remaining verification is by hand, above: render the Optimization tab, run the probe
 against a real server, and sanity-check the proposed values on staging.
 
-### Phase 2 — the significant one
+### Phase 2 — done, but unproven on a real machine
 
-The first phase that writes to a server.
-
-- [ ] `ChangeWriter`: read → hash → back up → write → validate → reload
-- [ ] Drop-in config files (`zz-vito-tuning.conf`) rather than editing vendor files
-- [ ] Validators (`postgres -C`, `nginx -t`, `php-fpm -t`)
-- [ ] Restore-and-throw when validation fails
-- [ ] Confirmation naming the blast radius for a restart
-- [ ] Rollback UI over the `optimization_changes` manifest
-- [ ] Queued job (`UniqueQueue`) so two runs cannot race on one server
-
-`optimization_changes` already exists and is unused — it is the manifest Phase 2
-depends on.
+- [x] `ChangeWriter`: read → hash → back up → write → validate → restore on failure
+- [x] Drop-in config file (`conf.d/zz-vito-tuning.conf`) rather than editing the packaged file
+- [x] `postgres -C` validation before the service is asked to use the config
+- [x] Restart refused without explicit confirmation; the dialog names what is dropped
+- [x] Rollback over the `optimization_changes` manifest, replayed in reverse
+- [x] Drift detection — a file edited since the plan was drawn is not overwritten
+- [ ] **Queued job (`UniqueQueue`)** — apply currently runs in the request. Two
+      concurrent applies on one server would race, and a slow SSH round trip holds
+      a web worker. This is the main gap.
+- [ ] Verify step after apply (re-probe and confirm the value took effect)
 
 ### Later phases
 

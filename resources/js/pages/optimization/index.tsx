@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { OptimizationPlan } from '@/types/optimization';
 import BudgetBar from '@/pages/optimization/components/budget-bar';
 import ProposalList from '@/pages/optimization/components/proposal-list';
+import ApplyActions from '@/pages/optimization/components/apply-actions';
 
 export default function Optimization() {
   const page = usePage<{
@@ -44,10 +45,13 @@ export default function Optimization() {
             title="Optimization"
             description="Tuning values derived from this server's own resources"
           />
-          <Button onClick={analyze} disabled={analyzing}>
-            <GaugeIcon />
-            {analyzing ? 'Analyzing...' : 'Analyze server'}
-          </Button>
+          <div className="flex items-center gap-2">
+            {plan && <ApplyActions server={page.props.server} plan={plan} />}
+            <Button onClick={analyze} disabled={analyzing} variant={plan ? 'outline' : 'default'}>
+              <GaugeIcon />
+              {analyzing ? 'Analyzing...' : 'Analyze server'}
+            </Button>
+          </div>
         </HeaderContainer>
 
         {plan?.facts && plan.facts.oom_kill_count > 0 && (

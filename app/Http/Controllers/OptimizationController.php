@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Optimization\ApplyPlan;
 use App\Actions\Optimization\GeneratePlan;
+use App\Actions\Optimization\RollbackPlan;
 use App\Http\Resources\OptimizationPlanResource;
 use App\Models\OptimizationPlan;
 use App\Models\Server;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 use Spatie\RouteAttributes\Attributes\Get;
 use Spatie\RouteAttributes\Attributes\Middleware;
 use Spatie\RouteAttributes\Attributes\Post;
@@ -50,20 +54,59 @@ class OptimizationController extends Controller
         return back()->with('success', 'Server analysed.');
     }
 
+    /**
+     * Write the accepted proposals to the server.
+     *
+     * @throws Throwable
+     */
+    #[Post('/{plan}/apply', name: 'optimization.apply')]
+    public function apply(Request $request, Server $server, OptimizationPlan $plan, ApplyPlan $apply): RedirectResponse
+    {
+        $this->authorize('update', $plan);
+        $this->ensureBelongsTo($plan, $server);
+
+        $apply->handle($plan, $request->input());
+
+        return back()->with('success', 'Optimization applied.');
+    }
+
+    /**
+     * Put the server back the way it was before this plan.
+     *
+     * @throws Throwable
+     */
+    #[Post('/{plan}/rollback', name: 'optimization.rollback')]
+    public function rollback(Server $server, OptimizationPlan $plan, RollbackPlan $rollback): RedirectResponse
+    {
+        $this->authorize('update', $plan);
+        $this->ensureBelongsTo($plan, $server);
+
+        $rollback->handle($plan);
+
+        return back()->with('success', 'Optimization rolled back.');
+    }
+
     #[Get('/{plan}', name: 'optimization.show')]
     public function show(Server $server, OptimizationPlan $plan): Response
     {
-        // Route model binding resolves the plan globally, so a plan belonging to
-        // another server would otherwise be reachable through this server's URL.
-        if ($plan->server_id !== $server->id) {
-            abort(404);
-        }
-
         $this->authorize('view', $plan);
+        $this->ensureBelongsTo($plan, $server);
 
         return Inertia::render('optimization/index', [
             'plan' => new OptimizationPlanResource($plan->load('proposals')),
             'hasDatabase' => $server->database() !== null,
         ]);
+    }
+
+    /**
+     * Route model binding resolves a plan globally, so without this a plan
+     * belonging to another server is reachable -- and writable -- through this
+     * server's URL.
+     */
+    private function ensureBelongsTo(OptimizationPlan $plan, Server $server): void
+    {
+        if ($plan->server_id !== $server->id) {
+            abort(404);
+        }
     }
 }
