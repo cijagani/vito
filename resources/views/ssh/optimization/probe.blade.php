@@ -39,13 +39,19 @@ echo "fpm_avg_rss_mb:$(
 )"
 echo "fpm_active_children:$(pgrep -c 'php-fpm' 2>/dev/null || echo 0)"
 
+{{-- The newest installed version, whose pool serves requests. Reading across
+     every version mixes their settings and then reports whichever the glob
+     happened to list last. --}}
+DEFAULT_PHP=$(ls -1 /etc/php 2>/dev/null | sort -V | tail -n1)
+
 {{-- OPcache as the FPM pool will load it. php -i under the fpm SAPI is not
      available, so the value is read from the ini files that SAPI reads -- the CLI
      has its own conf.d and would report a different number entirely.
 
-     Dots are not valid in a probe key, so each is written with an underscore. --}}
+     conf.d is loaded in sorted order with the last definition winning, so the
+     files are sorted here the same way rather than trusting the glob. --}}
 @foreach (['opcache.memory_consumption', 'opcache.max_accelerated_files', 'opcache.interned_strings_buffer', 'opcache.jit_buffer_size'] as $ini)
-echo "php_{{ str_replace('.', '_', $ini) }}:$(sudo sh -c 'grep -shE "^[[:space:]]*{{ $ini }}[[:space:]]*=" /etc/php/*/fpm/conf.d/*.ini /etc/php/*/fpm/php.ini' 2>/dev/null | tail -n1 | sed -E 's/.*=[[:space:]]*//' | tr -d '')"
+echo "php_{{ preg_replace('/[^a-z0-9]+/i', '_', $ini) }}:$(sudo sh -c "grep -shE '^[[:space:]]*{{ $ini }}[[:space:]]*=' /etc/php/$DEFAULT_PHP/fpm/php.ini \$(ls -1 /etc/php/$DEFAULT_PHP/fpm/conf.d/*.ini 2>/dev/null | sort)" 2>/dev/null | tail -n1 | sed -E 's/.*=[[:space:]]*//')"
 @endforeach
 
 @if ($postgresVersion)
@@ -97,7 +103,9 @@ echo "redis_io_threads:$($REDIS_CLI CONFIG GET io-threads 2>/dev/null | tail -n1
 {{-- Current kernel values, so a setting already correct is reported as such
      rather than proposed again on every analysis. --}}
 @foreach (['net.core.somaxconn', 'net.core.netdev_max_backlog', 'net.ipv4.tcp_max_syn_backlog', 'net.ipv4.tcp_tw_reuse', 'net.ipv4.tcp_fin_timeout', 'vm.swappiness', 'fs.file-max'] as $key)
-echo "sysctl_{{ str_replace('.', '_', $key) }}:$(sysctl -n {{ $key }} 2>/dev/null || echo '')"
+{{-- Every separator becomes an underscore: fs.file-max keeps a hyphen if only
+     dots are replaced, and the parser drops any key that is not plain. --}}
+echo "sysctl_{{ preg_replace('/[^a-z0-9]+/i', '_', $key) }}:$(sysctl -n {{ $key }} 2>/dev/null || echo '')"
 @endforeach
 
 @if ($nginxInstalled)

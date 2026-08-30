@@ -183,7 +183,10 @@ class FpmOptimizer extends AbstractOptimizer
      */
     protected function currentValue(string $configKey, array $probe): ?string
     {
-        $value = $probe['fpm_'.str_replace('.', '_', $configKey)] ?? null;
+        // OPcache is read from the ini files under the php_ prefix; pool sizing
+        // is not read back at all, since the probe reports one value per PHP
+        // version rather than per pool.
+        $value = $probe['php_'.preg_replace('/[^a-z0-9]+/i', '_', $configKey)] ?? null;
 
         return $value === null || $value === '' ? null : $value;
     }

@@ -19,6 +19,39 @@ const GROUP_LABELS: Record<string, string> = {
   kernel: 'Kernel',
 };
 
+/**
+ * Renders a configuration value the way a person reads one.
+ *
+ * Services report sizes in whatever unit suits them -- MySQL answers in bytes,
+ * the rules speak in megabytes -- and "4294967296 to 3838M" asks the reader to do
+ * the conversion before they can tell whether the change is large or trivial.
+ * Only values that are unambiguously sizes are touched; a plain number like a
+ * connection limit is left exactly as the service reported it.
+ */
+function readableValue(value: string): string {
+  const bytes = /^\d+$/.test(value) ? Number(value) : null;
+
+  // A bare number is only a size when it is large and lands on a megabyte
+  // boundary. 150 connections must not become "0 MB".
+  if (bytes !== null && bytes >= 1048576 && bytes % 1048576 === 0) {
+    return formatMb(bytes / 1048576);
+  }
+
+  const withUnit = /^(\d+(?:\.\d+)?)\s*([kmgt])b?$/i.exec(value);
+
+  if (!withUnit) {
+    return value;
+  }
+
+  const multiplier: Record<string, number> = { k: 1 / 1024, m: 1, g: 1024, t: 1048576 };
+
+  return formatMb(Number(withUnit[1]) * (multiplier[withUnit[2].toLowerCase()] ?? 1));
+}
+
+function formatMb(mb: number): string {
+  return mb >= 1024 ? `${(mb / 1024).toFixed(mb % 1024 === 0 ? 0 : 1)} GB` : `${Math.round(mb)} MB`;
+}
+
 function ProposalRow({ proposal }: { proposal: OptimizationProposal }) {
   const [open, setOpen] = useState(false);
 
@@ -37,17 +70,19 @@ function ProposalRow({ proposal }: { proposal: OptimizationProposal }) {
         <span className="min-w-0 flex-1 font-mono text-sm">{proposal.config_key}</span>
 
         {proposal.applied_at ? (
-          <span className="font-mono text-sm font-medium">{proposal.proposed_value}</span>
+          <span className="font-mono text-sm font-medium">{readableValue(proposal.proposed_value)}</span>
         ) : proposal.is_change ? (
           <span className="flex items-center gap-2 font-mono text-sm">
-            <span className="text-muted-foreground line-through">{proposal.current_value ?? 'unset'}</span>
+            <span className="text-muted-foreground line-through">
+              {proposal.current_value ? readableValue(proposal.current_value) : 'unset'}
+            </span>
             <ArrowRightIcon className="text-muted-foreground size-3" />
-            <span className="font-medium">{proposal.proposed_value}</span>
+            <span className="font-medium">{readableValue(proposal.proposed_value)}</span>
           </span>
         ) : (
           <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
             <CheckIcon className="size-3.5" />
-            {proposal.proposed_value}
+            {readableValue(proposal.proposed_value)}
           </span>
         )}
 

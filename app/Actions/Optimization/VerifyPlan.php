@@ -109,7 +109,7 @@ class VerifyPlan
             'mysql' => 'mysql_'.$proposal->config_key,
             'redis' => 'redis_'.str_replace('-', '_', $proposal->config_key),
             'nginx' => 'nginx_'.$proposal->config_key,
-            'kernel' => 'sysctl_'.str_replace('.', '_', $proposal->config_key),
+            'kernel' => 'sysctl_'.preg_replace('/[^a-z0-9]+/i', '_', $proposal->config_key),
             'php-fpm' => 'php_'.str_replace('.', '_', $proposal->config_key),
             default => null,
         };
