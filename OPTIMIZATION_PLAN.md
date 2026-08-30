@@ -4,6 +4,17 @@
 **Supersedes:** the exploratory revisions of this document
 **Sources:** `g:\useful-scripts\360` (KB + scripts) · Vito 4.x codebase (branch `4.x`)
 
+> **Build status.** Phases 0–6 are implemented on `feature/server-optimization`.
+> Phase 7 (AI advisor) and phase 8 (polish) are not started. What was actually
+> built, what differs from this design, and what still needs checking by hand live
+> in [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) — read that for current
+> state. This document remains the reasoning behind the decisions.
+>
+> Two parts of phase 2 landed differently. **PgBouncer was not built**: it is a
+> separate service Vito does not manage, and tuning it would mean managing it
+> first. The **history UI was not built** either — plans are stored and rollback
+> works from the current plan, but there is no list of past plans to browse.
+
 ---
 
 ## Contents
@@ -908,6 +919,7 @@ Two properties worth stating explicitly:
 | **4 · PHP-FPM** | `php-fpm.yaml`, per-pool sizing by load class, OPcache, `ondemand` for low sites | 1w |
 | **5 · nginx · OS · Redis** | Three rulesets + optimizers; LXC detection; Redis cache/queue split | 1.5w |
 | **6 · Verify + Drift** | Full PASS/WARN/FAIL report, drift detection, scheduled re-check job | 1w |
+| | *Built without the scheduled re-check — verification runs after an apply and on request, not on a timer. Neither result is shown in the UI yet.* | |
 | **7 · AI advisor** | Prism integration, structured output, guardrail validation, provider settings | 2w |
 | **8 · Polish** | Page cache (guest-only), API endpoints + OpenAPI, advisor chat | 1.5w |
 

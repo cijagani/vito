@@ -2,7 +2,7 @@
 
 **Branch:** `feature/server-optimization` (pushed to `origin`, your fork)
 **Plan:** [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md)
-**Updated:** 2026-08-30
+**Updated:** 2026-08-30 · phases 0-6 complete, 15 commits
 
 ---
 
@@ -69,6 +69,13 @@ original first and restores it if the service rejects the result.
 | nginx workers | `app/Optimizers/Webserver/NginxContextApplier.php` | `nginx.conf`, edited in place |
 | Kernel | `app/Optimizers/OS/KernelApplier.php` | `/etc/sysctl.d/60-vito-tuning.conf` |
 | Redis | `app/Optimizers/Redis/RedisApplier.php` | `redis.conf` + live `CONFIG SET` |
+
+### Checking the result
+
+| Piece | File | What it answers |
+| --- | --- | --- |
+| Verification | `app/Actions/Optimization/VerifyPlan.php` | Did the setting actually take effect? |
+| Drift | `app/Actions/Optimization/DetectDrift.php` | Has anything edited these files since? |
 
 ### Storing and showing
 
@@ -163,7 +170,18 @@ failure — but not that `postgres -C` behaves as expected on a real install, no
 the drop-in path is right for every packaging. Try it on a staging database first, and
 roll it back, before using it anywhere that matters.
 
-### 4. The load class selector has not been clicked
+### 4. Drift detection now blocks writes
+
+This raises the stakes on a staging run. `ChangeWriter` refuses to overwrite a file
+whose contents no longer match what Vito last wrote, and hashes are normalised
+because reading a file over SSH trims it. If that normalisation behaves differently
+on a real machine -- different line endings, a shell that adds output -- applies
+will fail with a drift error that is not real drift.
+
+Worth checking explicitly: apply a plan, apply it again without touching anything,
+and confirm the second run is not refused.
+
+### 5. The load class selector has not been clicked
 
 Site settings → **Expected load** opens a dialog through the registry. The endpoint
 and validation are tested, but the dialog itself has never been rendered.
@@ -172,27 +190,25 @@ and validation are tested, but the dialog itself has never been rendered.
 
 ## What is left
 
-### Phase 1 — done
+### Phase 7 — AI advisor
 
-Remaining verification is by hand, above: render the Optimization tab, run the probe
-against a real server, and sanity-check the proposed values on staging.
+The only plan item not started. It reads the same rulesets and server context the
+engine uses and selects, adapts within declared bounds, and explains -- it does not
+invent values or emit shell. See section 15 of the plan.
 
-### Phase 2 — done, but unproven on a real machine
+### Unfinished within the phases marked done
 
-- [x] `ChangeWriter`: read → hash → back up → write → validate → restore on failure
-- [x] Drop-in config file (`conf.d/zz-vito-tuning.conf`) rather than editing the packaged file
-- [x] `postgres -C` validation before the service is asked to use the config
-- [x] Restart refused without explicit confirmation; the dialog names what is dropped
-- [x] Rollback over the `optimization_changes` manifest, replayed in reverse
-- [x] Drift detection — a file edited since the plan was drawn is not overwritten
-- [x] Queued jobs on the `ssh` queue, locked per server, so two applies on one
-      machine queue behind each other rather than interleaving writes
-- [x] Verify step after apply -- re-probes and records what the server reports
-
-### Later phases
-
-MySQL/MariaDB · nginx · kernel/sysctl · Redis · verify and drift detection · AI
-advisor. See the plan.
+- [ ] **Verification and drift are not shown anywhere.** Both are recorded --
+      `optimization_plans.verification`, and the `optimization.drift` endpoint --
+      but nothing in the Optimization tab reads them. The data is collected and
+      invisible, which is worse than not collecting it: an operator has no way to
+      know a change did not take effect.
+- [ ] **Per-pool PHP-FPM settings verify as `unknown`.** The probe reports one value
+      per PHP version, not per pool, so comparing would measure the wrong thing.
+      Reading `pm.max_children` back per pool would close this.
+- [ ] **Kernel values are proposed against an unknown current value** on any key the
+      probe does not read back, so a setting already correct is proposed again on
+      every analysis.
 
 ---
 
