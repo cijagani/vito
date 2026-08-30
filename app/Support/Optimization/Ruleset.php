@@ -24,7 +24,41 @@ class Ruleset
         public readonly array $rules,
         public readonly array $guardrails = [],
         public readonly array $variants = [],
+        public readonly array $extraServices = [],
     ) {}
+
+    /**
+     * Every service this ruleset governs.
+     *
+     * @return array<int, string>
+     */
+    public function services(): array
+    {
+        return array_values(array_unique([$this->service, ...$this->extraServices]));
+    }
+
+    /**
+     * The rules that apply to one variant of the engine.
+     *
+     * A rule marked `variant_requires` only applies where the named capability is
+     * declared -- MariaDB has a thread pool, standard MySQL does not, and
+     * proposing one for MySQL would produce a setting it refuses to start with.
+     *
+     * @param  array<int, array<string, mixed>>  $rules
+     * @return array<int, array<string, mixed>>
+     */
+    public function rulesForVariant(array $rules, ?string $variant): array
+    {
+        $capabilities = $variant === null ? [] : ($this->variants[$variant] ?? []);
+
+        return array_values(array_filter($rules, function (array $rule) use ($capabilities): bool {
+            if (! isset($rule['variant_requires'])) {
+                return true;
+            }
+
+            return ($capabilities[$rule['variant_requires']] ?? false) === true;
+        }));
+    }
 
     /**
      * Whether this ruleset governs the given installed service.
@@ -33,7 +67,9 @@ class Ruleset
      */
     public function appliesTo(string $service, ?string $version = null): bool
     {
-        if ($this->service !== $service) {
+        // A ruleset may cover several services that share an engine -- MySQL and
+        // MariaDB differ in a handful of settings, not in how InnoDB is tuned.
+        if (! in_array($service, $this->services(), true)) {
             return false;
         }
 

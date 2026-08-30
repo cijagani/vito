@@ -98,6 +98,7 @@ class RulesetLoader
             rules: $rules,
             guardrails: $data['guardrails'] ?? [],
             variants: $data['variants'] ?? [],
+            extraServices: $data['applies_to']['services'] ?? [],
         );
     }
 

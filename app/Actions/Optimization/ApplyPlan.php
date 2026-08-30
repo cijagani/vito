@@ -7,12 +7,15 @@ use App\Enums\OptimizationPlanStatus;
 use App\Exceptions\SSHError;
 use App\Models\OptimizationPlan;
 use App\Models\OptimizationProposal;
+use App\Optimizers\Database\MysqlApplier;
 use App\Optimizers\Database\PostgresApplier;
 use App\Optimizers\OS\KernelApplier;
 use App\Optimizers\PHP\FpmApplier;
 use App\Optimizers\Redis\RedisApplier;
 use App\Optimizers\Webserver\NginxApplier;
 use App\Optimizers\Webserver\NginxContextApplier;
+use App\Services\Database\Mariadb;
+use App\Services\Database\Mysql;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
@@ -28,6 +31,7 @@ class ApplyPlan
 {
     public function __construct(
         private readonly PostgresApplier $postgres = new PostgresApplier,
+        private readonly MysqlApplier $mysql = new MysqlApplier,
         private readonly FpmApplier $fpm = new FpmApplier,
         private readonly NginxApplier $nginx = new NginxApplier,
         private readonly NginxContextApplier $nginxContext = new NginxContextApplier,
@@ -53,12 +57,14 @@ class ApplyPlan
             $accepted = $plan->proposals()->where('accepted', true)->get();
 
             $database = $accepted->where('component', 'postgresql');
+            $mysql = $accepted->where('component', 'mysql');
             $fpm = $accepted->where('component', 'php-fpm');
             $nginx = $accepted->where('component', 'nginx');
             $kernel = $accepted->where('component', 'kernel');
             $redis = $accepted->where('component', 'redis');
 
             $this->postgres->apply($plan, $database);
+            $this->mysql->apply($plan, $mysql);
             $this->fpm->apply($plan, $fpm);
             $this->nginx->apply($plan, $nginx);
             $this->nginxContext->apply($plan, $nginx);
@@ -70,6 +76,10 @@ class ApplyPlan
             // no reason.
             if ($database->isNotEmpty()) {
                 $this->reloadDatabase($plan, $this->requiresRestart($database));
+            }
+
+            if ($mysql->isNotEmpty()) {
+                $this->reloadDatabase($plan, $this->requiresRestart($mysql));
             }
 
             if ($fpm->isNotEmpty()) {
@@ -126,7 +136,13 @@ class ApplyPlan
             return;
         }
 
-        $unit = $service->unit ?: 'postgresql';
+        // Derived from the service rather than defaulted, so a MySQL server whose
+        // unit was never recorded is not asked to restart postgresql.
+        $unit = $service->unit ?: match ($service->name) {
+            Mariadb::id() => 'mariadb',
+            Mysql::id() => 'mysql',
+            default => 'postgresql',
+        };
 
         $requiresRestart
             ? $plan->server->systemd()->restart($unit)

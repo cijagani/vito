@@ -1,0 +1,176 @@
+##
+# MySQL and MariaDB tuning.
+#
+# One ruleset for both. They share the InnoDB engine and almost every setting
+# here; where they diverge, a rule declares which variant it belongs to. MariaDB
+# and Percona have a thread pool that standard MySQL does not, which is the main
+# real difference at this level.
+#
+# Percona is listed as a variant but nothing selects it yet: Vito has no Percona
+# service. When it gains one, the entry below is already correct and only
+# applies_to needs the extra name.
+##
+component: mysql
+ruleset_version: 1
+
+applies_to:
+  service: mysql
+  services: ['mysql', 'mariadb']
+
+variants:
+  mysql: { thread_pool: false }
+  mariadb: { thread_pool: true }
+  percona: { thread_pool: true }
+
+rules:
+  - key: innodb_buffer_pool_size
+    formula: 'db_buffer_mb * 0.80'
+    unit: M
+    bounds:
+      min: 128
+      max_formula: 'total_ram_mb * 0.40'
+    apply: restart
+    severity_if_default: high
+    default_hint: '128M'
+    why: |
+      InnoDB's own cache for data and indexes, and the single most important
+      setting on a MySQL server. The packaged default of 128MB bears no relation
+      to the machine's memory, so a busy database reads from disk what it should
+      have been holding in memory. Deliberately not the whole database reserve --
+      connections, sort buffers and the log buffer come from the same slice.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: innodb_flush_method
+    value: 'O_DIRECT'
+    apply: restart
+    severity_if_default: medium
+    why: |
+      Writes data files directly rather than through the operating system's page
+      cache. InnoDB already caches those pages in its buffer pool, so without this
+      the same data is held twice and the buffer pool size stops describing how
+      much memory the database actually uses.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: innodb_log_file_size
+    value: '512M'
+    apply: restart
+    severity_if_default: medium
+    why: |
+      The redo log. Too small and InnoDB checkpoints constantly, turning steady
+      write load into repeated flush storms.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: innodb_log_buffer_size
+    value: '64M'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Buffers redo records before they reach the log. A larger buffer lets a
+      transaction that touches many rows avoid writing to disk mid-way.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: innodb_io_capacity
+    value: '2000'
+    value_when_rotational: '200'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      How many I/O operations per second InnoDB assumes the storage can sustain
+      for background work. The default of 200 describes a spinning disk and holds
+      back flushing badly on flash storage.
+    kb_ref: OPTIMIZATION_V2/12-STORAGE-FILESYSTEM-AND-IO.md
+
+  - key: innodb_io_capacity_max
+    value: '4000'
+    value_when_rotational: '400'
+    apply: reload
+    severity_if_default: low
+    why: |
+      The ceiling InnoDB may reach when it falls behind on flushing.
+    kb_ref: OPTIMIZATION_V2/12-STORAGE-FILESYSTEM-AND-IO.md
+
+  - key: innodb_file_per_table
+    value: 'ON'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Gives each table its own file, so dropping a table returns the space to the
+      filesystem. With a shared tablespace it never comes back.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: max_connections
+    formula: 'max_connections_target'
+    apply: reload
+    severity_if_default: low
+    why: |
+      The connection ceiling. Each connection carries its own buffers, so this
+      multiplies the per-connection memory settings -- a high ceiling is a promise
+      the machine has to be able to keep.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: thread_cache_size
+    value: '32'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Keeps threads around after a client disconnects instead of destroying and
+      recreating them. Useful for applications that open short-lived connections.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: table_open_cache
+    value: '4000'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Open table handles held across connections. Too small and the server
+      repeatedly closes and reopens the same tables under concurrency.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: skip_name_resolve
+    value: 'ON'
+    apply: restart
+    severity_if_default: medium
+    why: |
+      Stops the server doing a reverse DNS lookup on every incoming connection.
+      When DNS is slow, that lookup is added to the latency of every new
+      connection, and the cause is rarely obvious from the application side.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: slow_query_log
+    value: 'ON'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Records queries slower than long_query_time. Nearly free, and it is the
+      difference between diagnosing a slow application and guessing at it.
+    kb_ref: OPTIMIZATION_V2/09-OBSERVABILITY-TESTING-AND-RUNBOOK.md
+
+  - key: long_query_time
+    value: '2'
+    apply: reload
+    severity_if_default: low
+    why: |
+      The threshold for the slow query log, in seconds. Low enough to catch what
+      users notice, high enough that the log stays readable.
+    kb_ref: OPTIMIZATION_V2/09-OBSERVABILITY-TESTING-AND-RUNBOOK.md
+
+  - key: thread_handling
+    value: 'pool-of-threads'
+    apply: restart
+    variant_requires: thread_pool
+    severity_if_default: low
+    why: |
+      A pool of threads shared between connections rather than one thread each.
+      Available on MariaDB and Percona but not standard MySQL, and it matters most
+      when connection counts are high relative to cores.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md
+
+  - key: thread_pool_size
+    formula: 'min(cores, 8)'
+    apply: restart
+    variant_requires: thread_pool
+    severity_if_default: low
+    why: |
+      Threads in that pool, bounded by core count. More threads than cores adds
+      context switching without adding throughput.
+    kb_ref: OPTIMIZATION_V2/14-DATABASE-AND-CONNECTION-POOLING.md

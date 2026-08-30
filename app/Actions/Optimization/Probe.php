@@ -6,6 +6,7 @@ use App\DTOs\ServerFacts;
 use App\Exceptions\SSHError;
 use App\Models\Server;
 use App\Models\Service;
+use App\Services\Database\Mariadb;
 use App\Services\Database\Mysql;
 use App\Services\Database\Postgresql;
 use App\Services\Redis\Redis;
@@ -81,7 +82,11 @@ class Probe
         return $server->ssh()->exec(
             view('ssh.optimization.probe', [
                 'postgresVersion' => $this->versionOf($database, Postgresql::id()),
-                'mysqlVersion' => $this->versionOf($database, Mysql::id()),
+                // MariaDB answers the same queries as MySQL, so both take this
+                // branch; which one is actually running is read from the version
+                // string, since that is what decides the settings available.
+                'mysqlVersion' => $this->versionOf($database, Mysql::id())
+                    ?? $this->versionOf($database, Mariadb::id()),
                 'redisInstalled' => $this->hasService($server, [Redis::id(), Valkey::id()]),
                 'nginxInstalled' => $this->hasService($server, [Nginx::id()]),
             ]),

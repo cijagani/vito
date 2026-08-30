@@ -13,7 +13,7 @@
 | **0** | Budget engine, rule format, probe | **Done** |
 | **1** | Read-only analysis, UI, per-site FPM sizing | **Done** (untested in a browser) |
 | **2** | Apply + rollback (PostgreSQL) | **Done** (never run against a real server) |
-| **3** | MySQL / MariaDB | Not started |
+| **3** | MySQL / MariaDB | **Done** (never run against a real server) |
 | **4** | PHP-FPM apply | **Done** (never run against a real server) |
 | **5** | nginx · OS · Redis | **Done** (never run against a real server) |
 | **6** | Verify + drift detection | Not started |
@@ -50,11 +50,12 @@ original first and restores it if the service rejects the result.
 | --- | --- |
 | Shared logic | `app/Optimizers/AbstractOptimizer.php` |
 | PostgreSQL | `app/Optimizers/Database/PostgresOptimizer.php` |
+| MySQL / MariaDB | `app/Optimizers/Database/MysqlOptimizer.php` |
 | PHP-FPM + OPcache | `app/Optimizers/PHP/FpmOptimizer.php` |
 | nginx | `app/Optimizers/Webserver/NginxOptimizer.php` |
 | Kernel / sysctl | `app/Optimizers/OS/KernelOptimizer.php` |
 | Redis | `app/Optimizers/Redis/RedisOptimizer.php` |
-| Rulesets | `resources/optimization/rules/*.yaml` — postgresql, php-fpm, nginx, kernel, redis |
+| Rulesets | `resources/optimization/rules/*.yaml` — postgresql, mysql, php-fpm, nginx, kernel, redis |
 
 ### Writing changes
 
@@ -62,6 +63,7 @@ original first and restores it if the service rejects the result.
 | --- | --- | --- |
 | Single write path | `app/Support/Optimization/ChangeWriter.php` | — |
 | PostgreSQL | `app/Optimizers/Database/PostgresApplier.php` | `conf.d/zz-vito-tuning.conf` |
+| MySQL / MariaDB | `app/Optimizers/Database/MysqlApplier.php` | `mysql.conf.d/` or `mariadb.conf.d/` |
 | PHP-FPM | `app/Optimizers/PHP/FpmApplier.php` | `fpm/conf.d/zz-vito-tuning.ini` + pool files |
 | nginx http | `app/Optimizers/Webserver/NginxApplier.php` | `conf.d/zz-vito-tuning.conf` |
 | nginx workers | `app/Optimizers/Webserver/NginxContextApplier.php` | `nginx.conf`, edited in place |
@@ -76,7 +78,7 @@ original first and restores it if the service rejects the result.
 | Models | `app/Models/OptimizationPlan.php`, `OptimizationProposal.php`, `OptimizationChange.php` |
 | Schema | `database/migrations/2026_08_30_130000_create_optimization_tables.php` |
 | Policy | `app/Policies/OptimizationPlanPolicy.php` |
-| Controller | `app/Http/Controllers/OptimizationController.php` (3 named routes) |
+| Controller | `app/Http/Controllers/OptimizationController.php` (5 named routes) |
 | Resources | `app/Http/Resources/OptimizationPlanResource.php`, `OptimizationProposalResource.php` |
 | UI | `resources/js/pages/optimization/` |
 | Load class | `app/Enums/SiteLoadClass.php` + `sites.load_class` |
@@ -85,7 +87,7 @@ original first and restores it if the service rejects the result.
 
 ## Tests
 
-**~95 tests passing.** All SSH is faked; no real connections.
+**~150 tests passing.** All SSH is faked; no real connections.
 
 | File | Covers |
 | --- | --- |
@@ -101,6 +103,7 @@ original first and restores it if the service rejects the result.
 | `tests/Feature/Optimization/UpdateLoadClassTest.php` | Load class endpoint, validation, authorization |
 | `tests/Feature/Optimization/ApplyPlanTest.php` | Backup before write, restore on rejection, drift, rollback |
 | `tests/Feature/Optimization/AppliersTest.php` | Where each component writes, and what it leaves alone |
+| `tests/Unit/MysqlOptimizerTest.php` | Buffer pool sizing, IO capacity, MariaDB thread pool |
 | `tests/Unit/RedisOptimizerTest.php` | Memory ceiling, and the queue eviction guardrail |
 | `tests/Unit/ServerOptimizersTest.php` | nginx worker sizing, kernel values, container skip |
 

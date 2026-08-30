@@ -8,6 +8,7 @@ use App\Exceptions\SSHError;
 use App\Models\OptimizationPlan;
 use App\Models\Server;
 use App\Models\User;
+use App\Optimizers\Database\MysqlOptimizer;
 use App\Optimizers\Database\PostgresOptimizer;
 use App\Optimizers\OptimizerInterface;
 use App\Optimizers\OS\KernelOptimizer;
@@ -32,6 +33,7 @@ class GeneratePlan
      */
     private const array OPTIMIZERS = [
         PostgresOptimizer::class,
+        MysqlOptimizer::class,
         NginxOptimizer::class,
         KernelOptimizer::class,
         RedisOptimizer::class,

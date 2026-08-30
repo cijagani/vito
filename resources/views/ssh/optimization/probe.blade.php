@@ -52,9 +52,12 @@ echo "pg_data_directory:$(sudo -u postgres psql -tAc 'SHOW data_directory' 2>/de
 @endif
 
 @if ($mysqlVersion)
-echo "mysql_innodb_buffer_pool_size:$(mysql -N -B -e 'SELECT @@innodb_buffer_pool_size' 2>/dev/null || echo '')"
-echo "mysql_max_connections:$(mysql -N -B -e 'SELECT @@max_connections' 2>/dev/null || echo '')"
-echo "mysql_flush_method:$(mysql -N -B -e 'SELECT @@innodb_flush_method' 2>/dev/null || echo '')"
+{{-- The full version string, since MariaDB and Percona identify themselves there
+     and the settings they support differ from standard MySQL. --}}
+echo "mysql_version:$(mysql -N -B -e 'SELECT @@version' 2>/dev/null || echo '')"
+@foreach (['innodb_buffer_pool_size', 'innodb_flush_method', 'innodb_log_file_size', 'innodb_log_buffer_size', 'innodb_io_capacity', 'innodb_io_capacity_max', 'innodb_file_per_table', 'max_connections', 'thread_cache_size', 'table_open_cache', 'skip_name_resolve', 'slow_query_log', 'long_query_time'] as $variable)
+echo "mysql_{{ $variable }}:$(mysql -N -B -e 'SELECT @@{{ $variable }}' 2>/dev/null || echo '')"
+@endforeach
 @endif
 
 @if ($redisInstalled)
