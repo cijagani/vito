@@ -54,9 +54,12 @@ echo "pg_data_directory:$(sudo -u postgres psql -tAc 'SHOW data_directory' 2>/de
 @if ($mysqlVersion)
 {{-- The full version string, since MariaDB and Percona identify themselves there
      and the settings they support differ from standard MySQL. --}}
-echo "mysql_version:$(sudo mysql -N -B -e 'SELECT @@version' 2>/dev/null || echo '')"
+echo "mysql_version:$(sudo mysql -N -B -e 'SELECT VERSION()' 2>/dev/null || echo '')"
 @foreach (['innodb_buffer_pool_size', 'innodb_flush_method', 'innodb_log_file_size', 'innodb_log_buffer_size', 'innodb_io_capacity', 'innodb_io_capacity_max', 'innodb_file_per_table', 'max_connections', 'thread_cache_size', 'table_open_cache', 'skip_name_resolve', 'slow_query_log', 'long_query_time'] as $variable)
-echo "mysql_{{ $variable }}:$(sudo mysql -N -B -e 'SELECT @@{{ $variable }}' 2>/dev/null || echo '')"
+{{-- SHOW VARIABLES rather than a @@session variable: Blade strips a leading @ and
+     treats @{ as its own escape, so the sigil cannot survive interpolation
+     reliably however it is written. --}}
+echo "mysql_{{ $variable }}:$(sudo mysql -N -B -e "SHOW VARIABLES LIKE '{{ $variable }}'" 2>/dev/null | awk '{print $2}' || echo '')"
 @endforeach
 @endif
 
@@ -68,7 +71,11 @@ REDIS_CLI="redis-cli"
 if [ -f /root/.rediscli_auth ]; then
     REDIS_CLI="redis-cli -a $(sudo cat /root/.rediscli_auth 2>/dev/null) --no-auth-warning"
 elif sudo test -r /etc/redis/redis.conf; then
-    REDIS_PW=$(sudo grep -sE '^[[:space:]]*requirepass' /etc/redis/redis.conf | awk '{print $2}' | tr -d '"' | head -n1)
+    {{-- redis.conf usually includes a drop-in, and a provisioning tool commonly
+         puts the password there rather than in the main file, so both are read. --}}
+    {{-- sudo sh -c so the glob expands as root: the login user usually cannot
+         list conf.d, and a glob it cannot read silently expands to nothing. --}}
+    REDIS_PW=$(sudo sh -c 'grep -shE "^[[:space:]]*requirepass" /etc/redis/redis.conf /etc/redis/conf.d/*.conf' 2>/dev/null | tail -n1 | awk '{print $2}' | tr -d '"')
     [ -n "$REDIS_PW" ] && REDIS_CLI="redis-cli -a $REDIS_PW --no-auth-warning"
 fi
 echo "redis_version:$($REDIS_CLI INFO server 2>/dev/null | awk -F: '/^redis_version:/{print $2}' | tr -d '\r' || echo '')"

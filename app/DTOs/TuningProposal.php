@@ -47,19 +47,38 @@ class TuningProposal
     {
         $value = strtolower(trim($value));
 
-        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmgt]b?)$/i', $value, $matches) !== 1) {
-            return $value;
+        if (preg_match('/^(\d+(?:\.\d+)?)\s*([kmgt]b?)$/i', $value, $matches) === 1) {
+            $multiplier = match ($matches[2][0]) {
+                'k' => 1 / 1024,
+                'm' => 1,
+                'g' => 1024,
+                't' => 1024 * 1024,
+                default => 1,
+            };
+
+            return (string) (int) round((float) $matches[1] * $multiplier).'mb';
         }
 
-        $multiplier = match ($matches[2][0]) {
-            'k' => 1 / 1024,
-            'm' => 1,
-            'g' => 1024,
-            't' => 1024 * 1024,
-            default => 1,
-        };
+        // A bare number may be a size in bytes or a plain setting, and the two
+        // cannot be told apart from the value alone -- MySQL reports 536870912
+        // where the rule says 512M, but max_connections of 150 is just 150.
+        // Anything large enough to be a megabyte boundary is treated as bytes;
+        // below that, comparing as a number is what a reader means.
+        if (preg_match('/^\d+$/', $value) === 1) {
+            $number = (int) $value;
 
-        return (string) (int) round((float) $matches[1] * $multiplier).'mb';
+            return $number >= 1048576 && $number % 1048576 === 0
+                ? (string) intdiv($number, 1048576).'mb'
+                : (string) $number;
+        }
+
+        // Trailing zeros carry no meaning here: MySQL reports long_query_time as
+        // 2.000000 where the rule says 2.
+        if (preg_match('/^\d+\.\d+$/', $value) === 1) {
+            return rtrim(rtrim($value, '0'), '.');
+        }
+
+        return $value;
     }
 
     /**
