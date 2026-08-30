@@ -204,6 +204,22 @@ export default function Databases() {
                 <span className="text-muted-foreground">-</span>
               )}
             </div>
+            {page.props.site.php_version && (
+              <>
+                <Separator />
+                <div className="flex items-center justify-between p-4">
+                  <span>Expected load</span>
+                  <Button
+                    variant="outline"
+                    className="h-6"
+                    aria-label="Change expected load"
+                    onClick={() => dialog.siteLoadClass.open({ site: page.props.site })}
+                  >
+                    {page.props.site.load_class}
+                  </Button>
+                </div>
+              </>
+            )}
             <Separator />
             <div className="flex items-center justify-between p-4">
               <span>Status</span>

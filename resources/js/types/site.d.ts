@@ -21,6 +21,7 @@ export interface Site {
   webserver_default_ssl_method: string;
   path: string;
   php_version: string;
+  load_class: 'low' | 'medium' | 'high';
   php_settings: {
     max_upload_size: number | null;
     max_execution_time: number | null;

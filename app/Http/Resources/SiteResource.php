@@ -35,6 +35,7 @@ class SiteResource extends JsonResource
             'webserver_creates_site_ssls' => $this->webserver()->createsSiteSSLs(),
             'path' => $this->path,
             'php_version' => $this->php_version,
+            'load_class' => $this->load_class->getText(),
             'php_settings' => $this->phpSettings(),
             'supports_php_settings' => $this->supportsPhpSettings(),
             'repository' => $this->repository,

@@ -34,6 +34,7 @@ import SiteFeatureAction from '@/pages/site-features/components/feature-action';
 import ServerFeatureAction from '@/pages/server-features/components/feature-action';
 import Fail2banForm from '@/pages/security/components/fail2ban-form';
 import PhpSettingsDialog from '@/pages/site-settings/components/php-settings-dialog';
+import LoadClassDialog from '@/pages/site-settings/components/load-class-dialog';
 import CreateNetwork from '@/pages/networks/components/create-network';
 import AddNetworkServer from '@/pages/networks/components/add-server';
 import EditNetworkServer from '@/pages/networks/components/edit-network-server';
@@ -91,6 +92,7 @@ export const dialogs = {
   serverFeatureAction: ServerFeatureAction,
   fail2banForm: Fail2banForm,
   phpSettings: PhpSettingsDialog,
+  siteLoadClass: LoadClassDialog,
   networkCreate: CreateNetwork,
   networkAddServer: AddNetworkServer,
   networkEditServer: EditNetworkServer,

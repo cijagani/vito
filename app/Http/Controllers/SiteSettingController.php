@@ -6,6 +6,7 @@ use App\Actions\Site\DeleteSite;
 use App\Actions\Site\PreviewVhost;
 use App\Actions\Site\UpdateBasicAuth;
 use App\Actions\Site\UpdateBranch;
+use App\Actions\Site\UpdateLoadClass;
 use App\Actions\Site\UpdatePHPSettings;
 use App\Actions\Site\UpdatePHPVersion;
 use App\Actions\Site\UpdatePort;
@@ -74,6 +75,20 @@ class SiteSettingController extends Controller
         app(UpdateSourceControl::class)->update($site, $request->input());
 
         return back()->with('success', 'Source control updated successfully.');
+    }
+
+    /**
+     * How busy this site is, which decides its share of the PHP-FPM pool the next
+     * time the server is analysed. Changes nothing on the server by itself.
+     */
+    #[Patch('/load-class', name: 'site-settings.update-load-class')]
+    public function updateLoadClass(Request $request, Server $server, Site $site): RedirectResponse
+    {
+        $this->authorize('update', [$site, $server]);
+
+        app(UpdateLoadClass::class)->update($site, $request->input());
+
+        return back()->with('success', 'Load class updated successfully.');
     }
 
     /**
