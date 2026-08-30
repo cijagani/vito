@@ -65,7 +65,7 @@ use Throwable;
  * @property Collection<int, FirewallRule> $firewallRules
  * @property Collection<int, ServerIpAddress> $ipAddresses
  * @property Collection<int, CronJob> $cronJobs
- * @property Collection<int, Worker> $queues
+ * @property Collection<int, Worker> $workers
  * @property Collection<int, Backup> $backups
  * @property Collection<int, SshKey> $sshKeys
  * @property string $hostname
