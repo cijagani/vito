@@ -1,0 +1,85 @@
+##
+# Kernel and network tuning.
+#
+# These are written to /etc/sysctl.d rather than applied with `sysctl -w`, so they
+# survive a reboot. Many of them cannot be set inside a container at all; the
+# optimizer skips the whole component when the probe reports one, because a
+# half-applied sysctl file is worse than none.
+##
+component: kernel
+ruleset_version: 1
+
+applies_to:
+  service: kernel
+
+rules:
+  - key: net.core.somaxconn
+    value: '65535'
+    apply: reload
+    severity_if_default: high
+    default_hint: '4096'
+    why: |
+      How many completed connections may wait to be accepted. When this fills,
+      the kernel drops connections silently -- the client sees a timeout and the
+      server logs nothing, which is one of the harder failures to diagnose.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: net.core.netdev_max_backlog
+    value: '65535'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Packets queued for the network stack when they arrive faster than they can
+      be processed. Too small and packets are dropped at the interface, below
+      anything the application can see.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: net.ipv4.tcp_max_syn_backlog
+    value: '65535'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Half-open connections held during the TCP handshake. A small backlog makes
+      a traffic spike look like a connectivity problem.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: net.ipv4.tcp_tw_reuse
+    value: '1'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Lets a new outbound connection reuse a socket sitting in TIME-WAIT when it
+      is safe to do so. A busy application server talking to a database or an API
+      exhausts its ephemeral ports without this.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: net.ipv4.tcp_fin_timeout
+    value: '15'
+    apply: reload
+    severity_if_default: low
+    why: |
+      How long a socket waits in FIN-WAIT-2. The default of 60 seconds holds
+      resources for connections the other end has already abandoned.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: vm.swappiness
+    value: '10'
+    apply: reload
+    severity_if_default: high
+    default_hint: '60'
+    why: |
+      How willingly the kernel swaps pages that are still in use. The default
+      suits a desktop; on a server it evicts application memory in favour of page
+      cache and turns a latency problem into a disk problem.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md
+
+  - key: fs.file-max
+    formula: 'max(total_ram_mb * 128, 262144)'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      The system-wide ceiling on open file descriptors. Every connection, socket
+      and open file counts against it, and hitting it produces "too many open
+      files" from whichever process happens to ask next -- rarely the one at
+      fault.
+    kb_ref: OPTIMIZATION_V2/11-OS-KERNEL-SERVICE-LIFECYCLE.md

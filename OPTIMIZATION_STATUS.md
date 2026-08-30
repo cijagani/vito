@@ -14,8 +14,8 @@
 | **1** | Read-only analysis, UI, per-site FPM sizing | **Done** (untested in a browser) |
 | **2** | Apply + rollback (PostgreSQL) | **Done** (never run against a real server) |
 | **3** | MySQL / MariaDB | Not started |
-| **4** | PHP-FPM apply | Not started |
-| **5** | nginx · OS · Redis | Not started |
+| **4** | PHP-FPM apply | **Done** (never run against a real server) |
+| **5** | nginx · OS · Redis | **Done** (never run against a real server) |
 | **6** | Verify + drift detection | Not started |
 | **7** | AI advisor | Not started |
 
@@ -51,7 +51,22 @@ original first and restores it if the service rejects the result.
 | Shared logic | `app/Optimizers/AbstractOptimizer.php` |
 | PostgreSQL | `app/Optimizers/Database/PostgresOptimizer.php` |
 | PHP-FPM + OPcache | `app/Optimizers/PHP/FpmOptimizer.php` |
-| Rulesets | `resources/optimization/rules/postgresql.yaml`, `php-fpm.yaml` |
+| nginx | `app/Optimizers/Webserver/NginxOptimizer.php` |
+| Kernel / sysctl | `app/Optimizers/OS/KernelOptimizer.php` |
+| Redis | `app/Optimizers/Redis/RedisOptimizer.php` |
+| Rulesets | `resources/optimization/rules/*.yaml` — postgresql, php-fpm, nginx, kernel, redis |
+
+### Writing changes
+
+| Piece | File | Target |
+| --- | --- | --- |
+| Single write path | `app/Support/Optimization/ChangeWriter.php` | — |
+| PostgreSQL | `app/Optimizers/Database/PostgresApplier.php` | `conf.d/zz-vito-tuning.conf` |
+| PHP-FPM | `app/Optimizers/PHP/FpmApplier.php` | `fpm/conf.d/zz-vito-tuning.ini` + pool files |
+| nginx http | `app/Optimizers/Webserver/NginxApplier.php` | `conf.d/zz-vito-tuning.conf` |
+| nginx workers | `app/Optimizers/Webserver/NginxContextApplier.php` | `nginx.conf`, edited in place |
+| Kernel | `app/Optimizers/OS/KernelApplier.php` | `/etc/sysctl.d/60-vito-tuning.conf` |
+| Redis | `app/Optimizers/Redis/RedisApplier.php` | `redis.conf` + live `CONFIG SET` |
 
 ### Storing and showing
 
@@ -84,6 +99,10 @@ original first and restores it if the service rejects the result.
 | `tests/Feature/Optimization/PoolAllocatorTest.php` | Weighted split, floors, exclusions |
 | `tests/Feature/Optimization/OptimizationControllerTest.php` | Routes, authorization, no credentials in payload |
 | `tests/Feature/Optimization/UpdateLoadClassTest.php` | Load class endpoint, validation, authorization |
+| `tests/Feature/Optimization/ApplyPlanTest.php` | Backup before write, restore on rejection, drift, rollback |
+| `tests/Feature/Optimization/AppliersTest.php` | Where each component writes, and what it leaves alone |
+| `tests/Unit/RedisOptimizerTest.php` | Memory ceiling, and the queue eviction guardrail |
+| `tests/Unit/ServerOptimizersTest.php` | nginx worker sizing, kernel values, container skip |
 
 ### Running them
 

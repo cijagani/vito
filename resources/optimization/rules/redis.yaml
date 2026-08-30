@@ -1,0 +1,58 @@
+##
+# Redis memory and eviction.
+#
+# The eviction policy is the dangerous setting here. allkeys-lru is right for a
+# cache and catastrophic for a queue: under memory pressure Redis will discard
+# queued jobs to make room, and nothing reports that the work was lost. The
+# optimizer refuses to propose an eviction policy for an instance backing a queue.
+##
+component: redis
+ruleset_version: 1
+
+applies_to:
+  service: redis
+
+rules:
+  - key: maxmemory
+    formula: 'redis_mb'
+    unit: mb
+    apply: reload
+    severity_if_default: high
+    default_hint: '0 (unlimited)'
+    why: |
+      The memory ceiling. Left unlimited, Redis grows until the kernel kills
+      something -- and the process it kills is often not Redis. Set from the share
+      of memory the budget reserved for it.
+    kb_ref: OPTIMIZATION_V2/04-REDIS-ACL-SOCKETS-MEMORY.md
+
+  - key: maxmemory-policy
+    value: 'allkeys-lru'
+    apply: reload
+    severity_if_default: high
+    default_hint: 'noeviction'
+    why: |
+      When the ceiling is reached, discard the least recently used keys. Correct
+      for a cache, where losing an entry means recomputing it. Never applied to an
+      instance that backs a queue: there, eviction means silently dropping work
+      that was accepted.
+    kb_ref: OPTIMIZATION_V2/04-REDIS-ACL-SOCKETS-MEMORY.md
+
+  - key: tcp-backlog
+    value: '511'
+    apply: restart
+    severity_if_default: low
+    why: |
+      Pending connections Redis will hold. Bounded by net.core.somaxconn, so
+      raising it past the kernel's ceiling achieves nothing.
+    kb_ref: OPTIMIZATION_V2/04-REDIS-ACL-SOCKETS-MEMORY.md
+
+  - key: io-threads
+    formula: 'min(cores, 4)'
+    apply: restart
+    min_version: '6'
+    severity_if_default: low
+    why: |
+      Threads for reading and writing sockets, available from Redis 6. Command
+      execution stays single-threaded; this only removes the I/O bottleneck in
+      front of it, so more threads than a few buys nothing.
+    kb_ref: OPTIMIZATION_V2/04-REDIS-ACL-SOCKETS-MEMORY.md

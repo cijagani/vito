@@ -1,0 +1,95 @@
+##
+# nginx worker and HTTP tuning.
+#
+# The packaged defaults assume a far smaller machine than most servers Vito
+# manages: one worker and 768 connections regardless of how many cores or file
+# descriptors the box actually has.
+##
+component: nginx
+ruleset_version: 1
+
+applies_to:
+  service: nginx
+
+rules:
+  - key: worker_processes
+    formula: 'cores'
+    apply: reload
+    severity_if_default: high
+    default_hint: '1'
+    why: |
+      One worker per core. nginx workers are single-threaded, so a single worker
+      on a multi-core machine leaves every other core idle no matter how much
+      traffic arrives.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: worker_connections
+    formula: 'min(fd_limit / 2, 16384)'
+    apply: reload
+    severity_if_default: high
+    default_hint: '768'
+    why: |
+      Simultaneous connections per worker, capped at half the file-descriptor
+      limit because each connection consumes descriptors at both ends -- one for
+      the client and one for the upstream. Total capacity is this multiplied by
+      worker_processes.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: keepalive_timeout
+    value: '30'
+    apply: reload
+    severity_if_default: low
+    why: |
+      How long an idle connection is held open for reuse. Long enough that a page
+      and its assets share one connection, short enough that idle clients are not
+      holding workers indefinitely.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: client_max_body_size
+    value: '64m'
+    apply: reload
+    severity_if_default: medium
+    default_hint: '1m'
+    why: |
+      The largest request nginx will accept. The default of 1MB rejects most file
+      uploads with a 413 before the application ever sees them, which is a
+      confusing failure to debug from the application side.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: gzip
+    value: 'on'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Compresses text responses. Typically cuts HTML, CSS and JavaScript transfer
+      size by around 70%, which matters most on the connections that are already
+      slowest.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: gzip_comp_level
+    value: '5'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Mid-range compression. Higher levels cost noticeably more CPU per request
+      for very little further size reduction on typical web payloads.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md
+
+  - key: server_tokens
+    value: 'off'
+    apply: reload
+    severity_if_default: medium
+    why: |
+      Stops nginx advertising its exact version in response headers and error
+      pages. It does not make the server safer by itself, but it removes a free
+      hint about which vulnerabilities are worth trying.
+    kb_ref: OPTIMIZATION_V2/08-SECURITY-BOUNDARIES.md
+
+  - key: open_file_cache
+    value: 'max=10000 inactive=60s'
+    apply: reload
+    severity_if_default: low
+    why: |
+      Caches file descriptors and metadata for static files, so repeat requests
+      skip the filesystem lookup entirely.
+    kb_ref: OPTIMIZATION_V2/05-NGINX-THREE-LEVEL-OPTIMIZATION.md

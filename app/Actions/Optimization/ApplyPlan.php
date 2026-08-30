@@ -6,7 +6,14 @@ use App\Enums\ApplyMethod;
 use App\Enums\OptimizationPlanStatus;
 use App\Exceptions\SSHError;
 use App\Models\OptimizationPlan;
+use App\Models\OptimizationProposal;
 use App\Optimizers\Database\PostgresApplier;
+use App\Optimizers\OS\KernelApplier;
+use App\Optimizers\PHP\FpmApplier;
+use App\Optimizers\Redis\RedisApplier;
+use App\Optimizers\Webserver\NginxApplier;
+use App\Optimizers\Webserver\NginxContextApplier;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Throwable;
 
@@ -21,6 +28,11 @@ class ApplyPlan
 {
     public function __construct(
         private readonly PostgresApplier $postgres = new PostgresApplier,
+        private readonly FpmApplier $fpm = new FpmApplier,
+        private readonly NginxApplier $nginx = new NginxApplier,
+        private readonly NginxContextApplier $nginxContext = new NginxContextApplier,
+        private readonly KernelApplier $kernel = new KernelApplier,
+        private readonly RedisApplier $redis = new RedisApplier,
         private readonly RollbackPlan $rollback = new RollbackPlan,
     ) {}
 
@@ -40,11 +52,48 @@ class ApplyPlan
         try {
             $accepted = $plan->proposals()->where('accepted', true)->get();
 
-            $this->postgres->apply($plan, $accepted->where('component', 'postgresql'));
+            $database = $accepted->where('component', 'postgresql');
+            $fpm = $accepted->where('component', 'php-fpm');
+            $nginx = $accepted->where('component', 'nginx');
+            $kernel = $accepted->where('component', 'kernel');
+            $redis = $accepted->where('component', 'redis');
 
-            $this->reload($plan, $accepted->contains(
-                fn ($proposal): bool => $proposal->apply_method === ApplyMethod::RESTART
-            ));
+            $this->postgres->apply($plan, $database);
+            $this->fpm->apply($plan, $fpm);
+            $this->nginx->apply($plan, $nginx);
+            $this->nginxContext->apply($plan, $nginx);
+            $this->kernel->apply($plan, $kernel);
+            $this->redis->apply($plan, $redis);
+
+            // Only the services that were actually written are reloaded. Bouncing
+            // PHP-FPM because a database setting changed would drop requests for
+            // no reason.
+            if ($database->isNotEmpty()) {
+                $this->reloadDatabase($plan, $this->requiresRestart($database));
+            }
+
+            if ($fpm->isNotEmpty()) {
+                $this->reloadFpm($plan, $this->requiresRestart($fpm));
+            }
+
+            if ($nginx->isNotEmpty()) {
+                $this->reloadUnit($plan, 'nginx', $this->requiresRestart($nginx));
+            }
+
+            // sysctl values are read from the file at boot, so the written file is
+            // loaded now rather than restarting anything.
+            if ($kernel->isNotEmpty()) {
+                $plan->server->ssh()->exec(
+                    'sudo sysctl -p /etc/sysctl.d/60-vito-tuning.conf > /dev/null',
+                    'optimization-sysctl-load',
+                );
+            }
+
+            // Redis values were already set on the running server as the validity
+            // check, so only a restart-only setting needs the service bounced.
+            if ($redis->isNotEmpty() && $this->requiresRestart($redis)) {
+                $this->reloadUnit($plan, 'redis-server', true);
+            }
         } catch (Throwable $exception) {
             // Anything already written is put back, so a partial apply never
             // leaves the server in a state nobody planned for.
@@ -69,7 +118,7 @@ class ApplyPlan
      *
      * @throws SSHError
      */
-    private function reload(OptimizationPlan $plan, bool $requiresRestart): void
+    private function reloadDatabase(OptimizationPlan $plan, bool $requiresRestart): void
     {
         $service = $plan->server->database();
 
@@ -82,6 +131,48 @@ class ApplyPlan
         $requiresRestart
             ? $plan->server->systemd()->restart($unit)
             : $plan->server->systemd()->reload($unit);
+    }
+
+    /**
+     * Every installed PHP version, since OPcache is written per version and a pool
+     * belongs to one of them.
+     *
+     * @throws SSHError
+     */
+    private function reloadFpm(OptimizationPlan $plan, bool $requiresRestart): void
+    {
+        $services = $plan->server->services()->where('type', 'php')->get();
+
+        foreach ($services as $service) {
+            $unit = $service->unit ?: "php{$service->version}-fpm";
+
+            // OPcache memory is allocated once at start, so a reload leaves the old
+            // size in place; those settings are marked restart in the ruleset for
+            // exactly that reason.
+            $requiresRestart
+                ? $plan->server->systemd()->restart($unit)
+                : $plan->server->systemd()->reload($unit);
+        }
+    }
+
+    /**
+     * @throws SSHError
+     */
+    private function reloadUnit(OptimizationPlan $plan, string $unit, bool $requiresRestart): void
+    {
+        $requiresRestart
+            ? $plan->server->systemd()->restart($unit)
+            : $plan->server->systemd()->reload($unit);
+    }
+
+    /**
+     * @param  Collection<int, OptimizationProposal>  $proposals
+     */
+    private function requiresRestart(Collection $proposals): bool
+    {
+        return $proposals->contains(
+            fn (OptimizationProposal $proposal): bool => $proposal->apply_method === ApplyMethod::RESTART
+        );
     }
 
     /**

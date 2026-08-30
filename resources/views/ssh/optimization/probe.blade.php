@@ -58,11 +58,23 @@ echo "mysql_flush_method:$(mysql -N -B -e 'SELECT @@innodb_flush_method' 2>/dev/
 @endif
 
 @if ($redisInstalled)
+echo "redis_version:$(redis-cli INFO server 2>/dev/null | awk -F: '/^redis_version:/{print $2}' | tr -d '\r' || echo '')"
 echo "redis_maxmemory:$(redis-cli CONFIG GET maxmemory 2>/dev/null | tail -n1 || echo '')"
 echo "redis_maxmemory_policy:$(redis-cli CONFIG GET maxmemory-policy 2>/dev/null | tail -n1 || echo '')"
+echo "redis_tcp_backlog:$(redis-cli CONFIG GET tcp-backlog 2>/dev/null | tail -n1 || echo '')"
+echo "redis_io_threads:$(redis-cli CONFIG GET io-threads 2>/dev/null | tail -n1 || echo '')"
 @endif
 
+{{-- Current kernel values, so a setting already correct is reported as such
+     rather than proposed again on every analysis. --}}
+@foreach (['net.core.somaxconn', 'net.core.netdev_max_backlog', 'net.ipv4.tcp_max_syn_backlog', 'net.ipv4.tcp_tw_reuse', 'net.ipv4.tcp_fin_timeout', 'vm.swappiness', 'fs.file-max'] as $key)
+echo "sysctl_{{ str_replace('.', '_', $key) }}:$(sysctl -n {{ $key }} 2>/dev/null || echo '')"
+@endforeach
+
 @if ($nginxInstalled)
-echo "nginx_worker_processes:$(grep -sE '^\s*worker_processes' /etc/nginx/nginx.conf | awk '{print $2}' | tr -d ';' || echo '')"
-echo "nginx_worker_connections:$(grep -sE '^\s*worker_connections' /etc/nginx/nginx.conf | awk '{print $2}' | tr -d ';' || echo '')"
+{{-- Read across nginx.conf and conf.d, since a value may already have been set
+     in a drop-in. The last match wins, matching how nginx itself resolves them. --}}
+@foreach (['worker_processes', 'worker_connections', 'keepalive_timeout', 'client_max_body_size', 'gzip', 'gzip_comp_level', 'server_tokens', 'open_file_cache'] as $directive)
+echo "nginx_{{ $directive }}:$(grep -shE '^[[:space:]]*{{ $directive }}[[:space:]]' /etc/nginx/nginx.conf /etc/nginx/conf.d/*.conf 2>/dev/null | tail -n1 | sed -E 's/^[[:space:]]*{{ $directive }}[[:space:]]+//; s/;.*$//' | tr -d '\r' || echo '')"
+@endforeach
 @endif

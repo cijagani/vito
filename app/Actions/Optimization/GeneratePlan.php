@@ -10,7 +10,10 @@ use App\Models\Server;
 use App\Models\User;
 use App\Optimizers\Database\PostgresOptimizer;
 use App\Optimizers\OptimizerInterface;
+use App\Optimizers\OS\KernelOptimizer;
 use App\Optimizers\PHP\FpmOptimizer;
+use App\Optimizers\Redis\RedisOptimizer;
+use App\Optimizers\Webserver\NginxOptimizer;
 use App\Support\Optimization\ResourceBudget;
 use App\Support\Optimization\RulesetLoader;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +32,9 @@ class GeneratePlan
      */
     private const array OPTIMIZERS = [
         PostgresOptimizer::class,
+        NginxOptimizer::class,
+        KernelOptimizer::class,
+        RedisOptimizer::class,
     ];
 
     public function __construct(
