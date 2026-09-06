@@ -53,7 +53,7 @@ class SyncSiteRuntimeProfiles
             if (! $web->exists) {
                 $web->fill([
                     'static_cache_policy' => 'default',
-                    'symlink_policy' => 'legacy',
+                    'symlink_policy' => $lockedSite->isIsolated() ? 'if_not_owner' : 'legacy',
                     'access_log_enabled' => true,
                 ]);
             }

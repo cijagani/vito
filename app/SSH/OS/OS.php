@@ -117,14 +117,23 @@ class OS
     /**
      * @throws SSHError
      */
-    public function createIsolatedUser(string $user, string $password, int $site_id): void
+    public function createIsolatedUser(
+        string $user,
+        string $password,
+        int $site_id,
+        bool $allowExisting = false,
+        ?string $webserverUser = null,
+        bool $grantWebserverGroup = true,
+    ): void
     {
         $this->server->ssh()->exec(
             view('ssh.os.create-isolated-user', [
                 'user' => $user,
-                'serverUser' => $this->server->getSshUser(),
                 'password' => $password,
                 'key' => escapeshellarg(trim($this->server->sshKey()['public_key'])),
+                'allowExisting' => $allowExisting,
+                'webserverUser' => $webserverUser ?? $this->server->getSshUser(),
+                'grantWebserverGroup' => $grantWebserverGroup,
             ]),
             'create-isolated-user',
             $site_id
@@ -134,12 +143,13 @@ class OS
     /**
      * @throws SSHError
      */
-    public function deleteIsolatedUser(string $user): void
+    public function deleteIsolatedUser(string $user, ?string $webserverUser = null): void
     {
         $this->server->ssh()->exec(
             view('ssh.os.delete-isolated-user', [
                 'user' => $user,
                 'serverUser' => $this->server->getSshUser(),
+                'webserverUser' => $webserverUser ?? $this->server->getSshUser(),
             ]),
             'delete-isolated-user'
         );

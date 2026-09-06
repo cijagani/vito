@@ -84,6 +84,8 @@ test('conf renderer emits expected vars', function () {
     $this->assertStringContainsString("SITE_ID='{$this->site->id}'", $conf);
     $this->assertStringContainsString("DOMAIN='{$this->site->domain}'", $conf);
     $this->assertStringContainsString("LOG_FORMAT='COMBINED'", $conf);
+    $this->assertStringContainsString("LIVE_LOG='/var/log/vito/sites/{$this->site->id}/access.log'", $conf);
+    $this->assertStringContainsString("LOG_GLOB='/var/log/vito/sites/{$this->site->id}/access.log*'", $conf);
     $this->assertStringContainsString('RETENTION_MONTHS=', $conf);
     $this->assertStringContainsString("SSH_USER='{$this->server->getSshUser()}'", $conf);
 });

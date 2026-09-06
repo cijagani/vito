@@ -39,6 +39,7 @@ test('endpoint enables basic auth with users', function () {
     expect(password_verify('secret123', $auth['users'][0]['bcrypt']))->toBeTrue();
 
     SSH::assertExecutedContains('/etc/nginx/auth/site-'.$this->site->id.'.htpasswd');
+    SSH::assertExecutedContains('chown root:vito-nginx /etc/nginx/auth/site-'.$this->site->id.'.htpasswd');
 });
 
 test('empty users forces disabled', function () {

@@ -57,6 +57,11 @@ test('create alias domain', function () {
         'type' => HostedDomainType::ALIAS->value,
         'ssl_method' => SslMethod::NONE->value,
     ]);
+    $this->assertDatabaseHas('server_hostname_reservations', [
+        'server_id' => $this->server->id,
+        'site_id' => $this->site->id,
+        'hostname' => 'alias.example.com',
+    ]);
 });
 
 test('create redirect domain', function () {

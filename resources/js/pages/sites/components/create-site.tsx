@@ -36,6 +36,7 @@ type CreateSiteForm = {
   repository: string;
   branch: string;
   user: string;
+  shared_user: boolean;
   // Tooling versions land here as `{tool_id}_version` (e.g. `node_version`,
   // `bun_version`), driven by the site type's `createTimeTools()` and the
   // `tooling` DynamicField.
@@ -103,6 +104,7 @@ export default function CreateSite({
     repository: '',
     branch: '',
     user: '',
+    shared_user: false,
   });
 
   const serverId = form.data.server ? parseInt(form.data.server, 10) : 0;
@@ -132,7 +134,9 @@ export default function CreateSite({
     const blocked = new Set([...existing, ...reserved]);
 
     const suggestion = suggestIsolatedUsername(form.data.domain, blocked);
-    if (suggestion !== form.data.user) form.setData('user', suggestion);
+    if (suggestion !== form.data.user) {
+      form.setData((data) => ({ ...data, user: suggestion, shared_user: false }));
+    }
   }, [form.data.server, form.data.domain, userManuallyEdited, isolatedUsersQuery.data, isolatedUsersQuery.isLoading, configs]);
 
   const submit: FormEventHandler = (e) => {
@@ -648,15 +652,26 @@ export default function CreateSite({
                     value={form.data.user}
                     onValueChange={(value) => {
                       setUserManuallyEdited(true);
-                      form.setData('user', value);
+                      const isExisting = (isolatedUsersQuery.data ?? []).some((option) => option.user === value);
+                      form.setData((data) => ({ ...data, user: value, shared_user: isExisting }));
                     }}
                     onSearchChange={() => setUserManuallyEdited(true)}
                   />
                   <p className="text-muted-foreground text-xs">
-                    Pick an existing isolated user to host this site alongside others, or create a new one.
+                    New users provide the strongest site boundary. Reusing a user creates an explicit shared trust group.
                   </p>
-                  <InputError message={form.errors.user} />
-                </FormField>
+                  {selectedIsolatedUser && (
+                    <Alert>
+                      <AlertDescription>
+                        This site will share Linux file and process access with {selectedIsolatedUser.sites_count}{' '}
+                        {selectedIsolatedUser.sites_count === 1 ? 'existing site' : 'existing sites'} using{' '}
+                        <span className="font-medium">{selectedIsolatedUser.user}</span>. Only continue when those sites trust each other.
+                      </AlertDescription>
+                    </Alert>
+                    )}
+                    <InputError message={form.errors.user} />
+                    <InputError message={form.errors.shared_user} />
+                  </FormField>
 
                 {configs.site.types[form.data.type].form?.map((config) => getFormField(config))}
               </>

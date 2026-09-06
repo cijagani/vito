@@ -71,7 +71,8 @@ test('nginx exposes per site error log', function () {
 
     $key = 'nginx:site:'.$this->site->id.':error';
     expect($entries->has($key))->toBeTrue();
-    expect($entries[$key]['display_target'])->toBe('/var/log/nginx/'.$this->site->domain.'-error.log');
+    expect($entries[$key]['display_target'])->toBe('/var/log/vito/sites/'.$this->site->id.'/error.log')
+        ->and($entries->has('nginx:site:'.$this->site->id.':access'))->toBeTrue();
 });
 
 test('services without has logs are skipped', function () {

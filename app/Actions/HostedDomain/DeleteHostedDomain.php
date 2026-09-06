@@ -3,7 +3,9 @@
 namespace App\Actions\HostedDomain;
 
 use App\Actions\Site\BroadcastSiteUpdate;
+use App\Actions\Site\SyncSiteReservations;
 use App\Models\HostedDomain;
+use Illuminate\Support\Facades\DB;
 
 class DeleteHostedDomain
 {
@@ -13,7 +15,10 @@ class DeleteHostedDomain
 
         $site = $hostedDomain->site;
 
-        $hostedDomain->delete();
+        DB::transaction(function () use ($hostedDomain, $site): void {
+            $hostedDomain->delete();
+            app(SyncSiteReservations::class)->sync($site);
+        });
 
         $site->webserver()->updateVHost($site);
 

@@ -7,6 +7,7 @@ use App\Enums\HostedDomainType;
 use App\Models\HostedDomain;
 use App\Models\Redirect;
 use App\Models\Site;
+use App\Models\SiteWebProfile;
 use App\Models\Ssl;
 use Illuminate\Support\Collection;
 use Mustache\Engine;
@@ -199,6 +200,7 @@ abstract class AbstractGenerateConfig
     protected function buildCommonData(Site $site, string $primaryDomain): array
     {
         $siteTypeData = $site->type()->vhostData();
+        $webProfile = $site->webProfile()->first();
         $isOctane = (bool) data_get($site->type_data, 'octane', false);
         $isPhp = ($siteTypeData['is_php'] ?? false) && ! $isOctane;
 
@@ -211,6 +213,7 @@ abstract class AbstractGenerateConfig
         return [
             ...$siteTypeData,
             ...$this->buildLoadBalancerData($site),
+            'site_id' => $site->id,
             'primary_domain' => $primaryDomain,
             'root' => $site->getWebDirectoryPath(),
             'is_php' => $isPhp,
@@ -231,6 +234,11 @@ abstract class AbstractGenerateConfig
             'basic_auth_file' => $site->htpasswdPath(),
             'basic_auth_users' => $basicAuthEnabled ? array_values($basicAuth['users']) : [],
             'verification_key' => $site->verification_key,
+            'access_log_enabled' => $webProfile instanceof SiteWebProfile
+                ? $webProfile->access_log_enabled
+                : true,
+            'access_log_path' => $site->runtimeArtifacts()->logDirectory().'/access.log',
+            'error_log_path' => $site->runtimeArtifacts()->logDirectory().'/error.log',
         ];
     }
 
@@ -260,6 +268,9 @@ abstract class AbstractGenerateConfig
             $block['basic_auth_file'] = $data['basic_auth_file'];
             $block['basic_auth_users'] = $data['basic_auth_users'];
             $block['verification_key'] = $data['verification_key'];
+            $block['access_log_enabled'] = $data['access_log_enabled'];
+            $block['access_log_path'] = $data['access_log_path'];
+            $block['error_log_path'] = $data['error_log_path'];
             $block = $this->enrichServerBlock($block, $data);
         }
 

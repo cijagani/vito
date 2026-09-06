@@ -99,6 +99,14 @@ test('proxied site broadcast carries needs first deploy warning', function () {
 
     app(UpdatePort::class)->update($proxiedSite, ['port' => 4000]);
 
+    $this->assertDatabaseHas('server_port_reservations', [
+        'server_id' => $this->server->id,
+        'site_id' => $proxiedSite->id,
+        'protocol' => 'tcp',
+        'port' => 4000,
+        'purpose' => 'site_proxy',
+    ]);
+
     Event::assertDispatched(
         SocketEvent::class,
         fn (SocketEvent $event) => $event->data->type === 'site.updated'

@@ -17,7 +17,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $symlink_policy
  * @property bool $access_log_enabled
  * @property int $desired_revision
+ * @property ?string $desired_checksum
  * @property ?int $applied_revision
+ * @property ?string $applied_checksum
  * @property ?\Carbon\Carbon $last_applied_at
  * @property ?string $last_apply_error
  * @property Site $site
@@ -38,7 +40,9 @@ class SiteWebProfile extends AbstractModel
         'symlink_policy',
         'access_log_enabled',
         'desired_revision',
+        'desired_checksum',
         'applied_revision',
+        'applied_checksum',
         'last_applied_at',
         'last_apply_error',
     ];

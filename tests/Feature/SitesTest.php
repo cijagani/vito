@@ -88,6 +88,7 @@ test('create site reusing existing isolated user', function () {
         'php_version' => '8.2',
         'web_directory' => 'public',
         'user' => 'shared',
+        'shared_user' => true,
     ])
         ->assertSessionDoesntHaveErrors();
 
@@ -101,7 +102,33 @@ test('create site reusing existing isolated user', function () {
         'path' => '/home/shared/second.example.com',
     ]);
 
-    SSH::assertExecutedContains('User shared already exists');
+    SSH::assertExecutedContains('VITO_MARKER="/var/lib/vito/managed-users/shared"');
+});
+
+test('create site requires explicit shared trust group confirmation', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'shared',
+        'domain' => 'first.example.com',
+        'path' => '/home/shared/first.example.com',
+        'php_version' => '8.2',
+    ]);
+
+    $this->post(route('sites.store', ['server' => $this->server]), [
+        'type' => PHPBlank::id(),
+        'domain' => 'second.example.com',
+        'aliases' => [],
+        'php_version' => '8.2',
+        'web_directory' => 'public',
+        'user' => 'shared',
+    ])->assertSessionHasErrors('user');
+
+    $this->assertDatabaseMissing('sites', [
+        'domain' => 'second.example.com',
+    ]);
 });
 
 test('isolated users endpoint lists users with counts', function () {

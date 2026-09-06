@@ -7,6 +7,7 @@ use App\Exceptions\SSHError;
 use App\Models\Service;
 use App\Models\Site;
 use App\Services\PHP\PHP;
+use App\Services\Webserver\Nginx;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
@@ -64,7 +65,10 @@ class DeleteSite
             $isLastSibling = ! $site->userSharedWithSiblings();
 
             if ($isLastSibling) {
-                $site->server->os()->deleteIsolatedUser($site->user);
+                $webserverUser = $site->webserver()::id() === Nginx::id()
+                    ? Nginx::WORKER_USER
+                    : $site->server->getSshUser();
+                $site->server->os()->deleteIsolatedUser($site->user, $webserverUser);
             }
 
             $this->deleteRow($site);

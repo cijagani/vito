@@ -56,7 +56,7 @@ use RuntimeException;
  * @property string $ssh_key
  * @property string $branch
  * @property SiteStatus $status
- * @property int $port
+ * @property ?int $port
  * @property int $progress
  * @property ?string $progress_step
  * @property ?string $last_error

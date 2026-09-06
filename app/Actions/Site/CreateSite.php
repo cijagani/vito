@@ -4,6 +4,7 @@ namespace App\Actions\Site;
 
 use App\Enums\HostedDomainStatus;
 use App\Enums\HostedDomainType;
+use App\Enums\IsolatedUserManagementState;
 use App\Enums\SiteStatus;
 use App\Exceptions\RepositoryNotFound;
 use App\Exceptions\RepositoryPermissionDenied;
@@ -16,7 +17,6 @@ use App\Models\Site;
 use App\Services\Webserver\Webserver;
 use App\Tooling\ToolingRegistry;
 use App\ValidationRules\DomainRule;
-use Exception;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -34,6 +34,7 @@ class CreateSite
      */
     public function create(Server $server, array $input): Site
     {
+        $input = $this->normalizeHostnames($input);
         $input = $this->lockRuntimeVersionsToExistingUser($server, $input);
 
         $this->validate($server, $input);
@@ -42,11 +43,19 @@ class CreateSite
         try {
             $user = $input['user'];
 
-            $isolatedUser = $user !== $server->getSshUser()
-                ? IsolatedUser::query()->firstOrCreate(
+            $isolatedUser = null;
+            if ($user !== $server->getSshUser()) {
+                $isolatedUser = IsolatedUser::query()->firstOrCreate(
                     ['server_id' => $server->id, 'username' => $user],
-                )
-                : null;
+                    ['management_state' => IsolatedUserManagementState::PENDING],
+                );
+
+                if (! $isolatedUser->wasRecentlyCreated && ! filter_var($input['shared_user'] ?? false, FILTER_VALIDATE_BOOL)) {
+                    throw ValidationException::withMessages([
+                        'user' => 'This user was claimed concurrently. Confirm shared trust-group reuse to continue.',
+                    ]);
+                }
+            }
 
             $site = new Site([
                 'server_id' => $server->id,
@@ -119,6 +128,8 @@ class CreateSite
                 ]);
             }
 
+            app(SyncSiteReservations::class)->sync($site);
+
             // create base commands if any
             $site->commands()->createMany($site->type()->baseCommands());
 
@@ -127,8 +138,11 @@ class CreateSite
             dispatch(new CreateJob($site));
 
             return $site;
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             DB::rollBack();
+            if ($e instanceof ValidationException) {
+                throw $e;
+            }
             throw ValidationException::withMessages([
                 'type' => $e->getMessage(),
             ]);
@@ -148,8 +162,10 @@ class CreateSite
                 Rule::unique('sites', 'domain')->where(fn ($query) => $query->where('server_id', $server->id)),
             ],
             'aliases.*' => [
+                'distinct',
                 new DomainRule,
             ],
+            'aliases' => ['sometimes', 'array'],
             'user' => [
                 'required',
                 'regex:'.self::ISOLATED_USER_PATTERN,
@@ -162,7 +178,38 @@ class CreateSite
             ],
         ];
 
-        Validator::make($input, array_merge($rules, $this->typeRules($server, $input)))->validate();
+        $rules['shared_user'] = ['sometimes', 'boolean'];
+
+        $validator = Validator::make($input, array_merge($rules, $this->typeRules($server, $input)));
+        $validator->after(function ($validator) use ($server, $input): void {
+            $aliases = isset($input['aliases']) && is_array($input['aliases']) ? $input['aliases'] : [];
+            if (in_array($input['domain'] ?? null, $aliases, true)) {
+                $validator->errors()->add('aliases', 'The primary domain cannot also be an alias.');
+            }
+
+            $user = $input['user'] ?? null;
+            if (! is_string($user) || $user === '') {
+                return;
+            }
+
+            $exists = IsolatedUser::query()
+                ->where('server_id', $server->id)
+                ->where('username', $user)
+                ->exists();
+            $shared = filter_var($input['shared_user'] ?? false, FILTER_VALIDATE_BOOL);
+
+            if ($exists && ! $shared) {
+                $validator->errors()->add(
+                    'user',
+                    'This user already hosts sites. Confirm shared trust-group reuse to continue.'
+                );
+            }
+
+            if (! $exists && $shared) {
+                $validator->errors()->add('shared_user', 'A new isolated user cannot be marked as shared.');
+            }
+        });
+        $validator->validate();
     }
 
     /**
@@ -222,6 +269,26 @@ class CreateSite
             }
 
             $input[$field] = $existing;
+        }
+
+        return $input;
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function normalizeHostnames(array $input): array
+    {
+        if (isset($input['domain']) && is_string($input['domain'])) {
+            $input['domain'] = strtolower($input['domain']);
+        }
+
+        if (isset($input['aliases']) && is_array($input['aliases'])) {
+            $input['aliases'] = array_map(
+                fn (mixed $alias): mixed => is_string($alias) ? strtolower($alias) : $alias,
+                $input['aliases']
+            );
         }
 
         return $input;

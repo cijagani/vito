@@ -15,13 +15,14 @@ class RenderSiteStatsConf
         $domain = $this->safeDomain($site);
         $caddy = ($webserverId ?? $this->resolveWebserverId($site)) === 'caddy';
         $retention = $retentionMonths ?? (int) ($site->server->service('log_analysis')?->type_data['data_retention'] ?? 12);
+        $nginxLogDirectory = $site->runtimeArtifacts()->logDirectory();
 
         $vars = [
             'SITE_ID' => (string) $site->id,
             'DOMAIN' => $domain,
             'LOG_FORMAT' => $caddy ? 'CADDY' : 'COMBINED',
-            'LIVE_LOG' => $caddy ? "/var/log/caddy/{$domain}-access.log" : "/var/log/nginx/{$domain}-access.log",
-            'LOG_GLOB' => $caddy ? "/var/log/caddy/{$domain}-access*.log*" : "/var/log/nginx/{$domain}-access.log*",
+            'LIVE_LOG' => $caddy ? "/var/log/caddy/{$domain}-access.log" : "{$nginxLogDirectory}/access.log",
+            'LOG_GLOB' => $caddy ? "/var/log/caddy/{$domain}-access*.log*" : "{$nginxLogDirectory}/access.log*",
             'RETENTION_MONTHS' => (string) $retention,
             'SSH_USER' => $this->safeSshUser($site),
         ];

@@ -2,6 +2,7 @@
 
 namespace App\Actions\HostedDomain;
 
+use App\Actions\Site\SyncSiteReservations;
 use App\Enums\HostedDomainStatus;
 use App\Enums\HostedDomainType;
 use App\Enums\SslMethod;
@@ -9,6 +10,7 @@ use App\Jobs\HostedDomain\CheckDomainJob;
 use App\Models\HostedDomain;
 use App\Models\Site;
 use App\Models\Ssl;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -21,15 +23,20 @@ class CreateHostedDomain
     {
         $validated = $this->validate($site, $input);
 
-        $hostedDomain = new HostedDomain;
-        $hostedDomain->site_id = $site->id;
-        $hostedDomain->domain = $validated['domain'];
-        $hostedDomain->type = $validated['type'];
-        $hostedDomain->status = HostedDomainStatus::CREATING;
-        $hostedDomain->ssl_method = SslMethod::from($validated['ssl_method']);
-        $hostedDomain->ssl_id = $validated['ssl_method'] === SslMethod::CUSTOM->value ? (int) $validated['ssl_id'] : null;
+        $hostedDomain = DB::transaction(function () use ($site, $validated): HostedDomain {
+            $hostedDomain = new HostedDomain;
+            $hostedDomain->site_id = $site->id;
+            $hostedDomain->domain = strtolower($validated['domain']);
+            $hostedDomain->type = $validated['type'];
+            $hostedDomain->status = HostedDomainStatus::CREATING;
+            $hostedDomain->ssl_method = SslMethod::from($validated['ssl_method']);
+            $hostedDomain->ssl_id = $validated['ssl_method'] === SslMethod::CUSTOM->value ? (int) $validated['ssl_id'] : null;
+            $hostedDomain->save();
 
-        $hostedDomain->save();
+            app(SyncSiteReservations::class)->sync($site);
+
+            return $hostedDomain;
+        });
 
         dispatch(new CheckDomainJob($hostedDomain))->onQueue('ssh');
 

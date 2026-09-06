@@ -2,7 +2,9 @@
 
 namespace App\SiteTypes;
 
+use App\Actions\Webserver\PrepareNginxSiteFilesystem;
 use App\DTOs\SocketEventDTO;
+use App\Enums\IsolatedUserManagementState;
 use App\Events\SocketEvent;
 use App\Exceptions\FailedToDeployGitKey;
 use App\Exceptions\SSHCommandError;
@@ -13,6 +15,7 @@ use App\Models\Deployment;
 use App\Models\Service;
 use App\Models\Site;
 use App\Services\PHP\PHP;
+use App\Services\Webserver\Nginx;
 use App\SSH\OS\Git;
 use App\Tooling\SiteToolingState;
 use App\Tooling\ToolingRegistry;
@@ -183,11 +186,26 @@ abstract class AbstractSiteType implements SiteType
         }
 
         try {
+            $isolatedUser = $this->site->isolatedUser?->refresh();
+            if ($isolatedUser === null) {
+                throw new RuntimeException('Isolated user record not found');
+            }
+
+            $webserverUser = $this->site->webserver()::id() === Nginx::id()
+                ? Nginx::WORKER_USER
+                : $this->site->server->getSshUser();
+
             $this->site->server->os()->createIsolatedUser(
                 $this->site->user,
                 Str::random(15),
-                $this->site->id
+                $this->site->id,
+                $isolatedUser->management_state === IsolatedUserManagementState::MANAGED,
+                $webserverUser,
+                $this->site->webserver()::id() !== Nginx::id(),
             );
+            $isolatedUser->management_state = IsolatedUserManagementState::MANAGED;
+            $isolatedUser->managed_at ??= now();
+            $isolatedUser->save();
 
             if ($this->site->php_version) {
                 $service = $this->site->php();
@@ -221,6 +239,10 @@ abstract class AbstractSiteType implements SiteType
             return;
         }
         app(Git::class)->clone($this->site);
+
+        if ($this->site->webserver()::id() === Nginx::id()) {
+            app(PrepareNginxSiteFilesystem::class)->prepare($this->site);
+        }
     }
 
     /**

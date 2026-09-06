@@ -28,6 +28,7 @@ server {
     listen [::]:80;
 
     server_name{{#force_ssl_domains}} {{name}}{{/force_ssl_domains}};
+    add_header X-Vito-Site-ID "{{site_id}}" always;
 
     {{#verification_key}}
     location ^~ /.well-known/vito/{{verification_key}}/ {
@@ -66,10 +67,12 @@ server {
 
     add_header X-Frame-Options "SAMEORIGIN";
     add_header X-Content-Type-Options "nosniff";
+    add_header X-Vito-Site-ID "{{site_id}}" always;
 
     charset utf-8;
-    access_log /var/log/nginx/{{primary_domain}}-access.log;
-    error_log  /var/log/nginx/{{primary_domain}}-error.log error;
+    {{#access_log_enabled}}access_log {{access_log_path}};{{/access_log_enabled}}
+    {{^access_log_enabled}}access_log off;{{/access_log_enabled}}
+    error_log {{error_log_path}} error;
 
     {{#basic_auth_enabled}}
     auth_basic "{{basic_auth_realm}}";
@@ -231,6 +234,7 @@ server {
     {{/listen_443}}
 
     server_name{{#domains}} {{name}}{{/domains}};
+    add_header X-Vito-Site-ID "{{site_id}}" always;
 
     location ^~ /.well-known/acme-challenge/ {
         allow all;

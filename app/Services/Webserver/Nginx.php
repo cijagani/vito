@@ -3,6 +3,8 @@
 namespace App\Services\Webserver;
 
 use App\Actions\Site\EnsureSiteVerificationKey;
+use App\Actions\Webserver\ApplyNginxSiteConfig;
+use App\Actions\Webserver\EnsureNginxRuntimeIdentity;
 use App\Actions\Webserver\GenerateNginxConfig;
 use App\DTOs\ServiceLog;
 use App\Exceptions\SSHError;
@@ -10,10 +12,13 @@ use App\Exceptions\SSLCreationException;
 use App\Models\Site;
 use App\Models\Ssl;
 use App\Services\HasLogs;
+use LogicException;
 use Throwable;
 
 class Nginx extends AbstractWebserver implements HasLogs
 {
+    public const WORKER_USER = 'vito-nginx';
+
     public static function id(): string
     {
         return 'nginx';
@@ -44,10 +49,12 @@ class Nginx extends AbstractWebserver implements HasLogs
         $this->service->server->ssh()->write(
             '/etc/nginx/nginx.conf',
             view('ssh.services.webserver.nginx.nginx', [
-                'user' => $this->service->server->getSshUser(),
+                'user' => self::WORKER_USER,
             ]),
             'root'
         );
+
+        app(EnsureNginxRuntimeIdentity::class)->ensure($this->service->server);
 
         $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.create-default-ssl'),
@@ -86,32 +93,7 @@ class Nginx extends AbstractWebserver implements HasLogs
      */
     public function createVHost(Site $site): void
     {
-        // We need to get the isolated user first, if the site is isolated
-        // otherwise, use the default ssh user
-        $ssh = $this->service->server->ssh($site->user);
-
-        $ssh->exec(
-            view('ssh.services.webserver.nginx.create-path', [
-                'path' => $site->path,
-            ]),
-            'create-path',
-            $site->id
-        );
-
-        $this->service->server->ssh()->write(
-            '/etc/nginx/sites-available/'.$site->domain,
-            $this->generateVhost($site),
-            'root'
-        );
-
-        $this->service->server->ssh()->exec(
-            view('ssh.services.webserver.nginx.create-vhost', [
-                'domain' => $site->domain,
-                'vhost' => $this->generateVhost($site),
-            ]),
-            'create-vhost',
-            $site->id
-        );
+        app(ApplyNginxSiteConfig::class)->apply($site);
     }
 
     /**
@@ -123,23 +105,7 @@ class Nginx extends AbstractWebserver implements HasLogs
             return;
         }
 
-        if (! $vhost) {
-            $vhost = $this->generateVhost($site);
-        }
-
-        $this->service->server->ssh()->write(
-            '/etc/nginx/sites-available/'.$site->domain,
-            $vhost,
-            'root'
-        );
-
-        if ($restart) {
-            $this->service->server->systemd()->restart('nginx');
-
-            return;
-        }
-
-        $this->service->server->systemd()->reload('nginx');
+        app(ApplyNginxSiteConfig::class)->apply($site, $vhost, $restart);
     }
 
     /**
@@ -149,7 +115,8 @@ class Nginx extends AbstractWebserver implements HasLogs
     {
         return $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.get-vhost', [
-                'domain' => $site->domain,
+                'targetPath' => $site->runtimeArtifacts()->nginxAvailablePath(),
+                'legacyPath' => $site->runtimeArtifacts()->nginxLegacyAvailablePath($site->domain),
             ]),
         );
     }
@@ -159,6 +126,11 @@ class Nginx extends AbstractWebserver implements HasLogs
      */
     public function deleteSite(Site $site): void
     {
+        $path = $site->basePath();
+        if ($path !== '/home/'.$site->user.'/'.$site->domain) {
+            throw new LogicException('Refusing to delete an unsafe Nginx site path.');
+        }
+
         $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.remove-basic-auth-file', [
                 'path' => $site->htpasswdPath(),
@@ -168,8 +140,13 @@ class Nginx extends AbstractWebserver implements HasLogs
         );
         $this->service->server->ssh()->exec(
             view('ssh.services.webserver.nginx.delete-site', [
-                'domain' => $site->domain,
-                'path' => $site->basePath(),
+                'path' => $path,
+                'targetPath' => $site->runtimeArtifacts()->nginxAvailablePath(),
+                'enabledPath' => $site->runtimeArtifacts()->nginxEnabledPath(),
+                'legacyTargetPath' => $site->runtimeArtifacts()->nginxLegacyAvailablePath($site->domain),
+                'legacyEnabledPath' => $site->runtimeArtifacts()->nginxLegacyEnabledPath($site->domain),
+                'logDirectory' => $site->runtimeArtifacts()->logDirectory(),
+                'stateDirectory' => $site->runtimeArtifacts()->nginxStateDirectory(),
             ]),
             'delete-vhost',
             $site->id
@@ -241,17 +218,6 @@ class Nginx extends AbstractWebserver implements HasLogs
             'remove-os-default-site'
         );
 
-        $ssh->exec(
-            'sudo mkdir -p /var/www/vito-splash',
-            'create-vito-splash-dir'
-        );
-
-        $ssh->write(
-            '/var/www/vito-splash/index.html',
-            view('ssh.services.webserver.vito-splash'),
-            'root'
-        );
-
         $ssh->write(
             '/etc/nginx/sites-available/000-default',
             view('ssh.services.webserver.nginx.default-vhost'),
@@ -262,6 +228,8 @@ class Nginx extends AbstractWebserver implements HasLogs
             'sudo ln -sf /etc/nginx/sites-available/000-default /etc/nginx/sites-enabled/000-default',
             'enable-default-vhost'
         );
+
+        $ssh->exec('sudo nginx -t', 'validate-default-vhost');
     }
 
     public function versionCommand(): ?string
@@ -300,12 +268,20 @@ class Nginx extends AbstractWebserver implements HasLogs
             : $this->service->server->sites()->orderBy('id')->get(['id', 'domain']);
 
         foreach ($sites as $site) {
+            $logDirectory = $site->runtimeArtifacts()->logDirectory();
+            $logs[] = new ServiceLog(
+                key: 'nginx:site:'.$site->id.':access',
+                serviceLabel: 'NGINX',
+                label: $site->domain.' access log',
+                source: ServiceLog::SOURCE_FILE,
+                target: $logDirectory.'/access.log',
+            );
             $logs[] = new ServiceLog(
                 key: 'nginx:site:'.$site->id.':error',
                 serviceLabel: 'NGINX',
                 label: $site->domain.' error log',
                 source: ServiceLog::SOURCE_FILE,
-                target: '/var/log/nginx/'.$site->domain.'-error.log',
+                target: $logDirectory.'/error.log',
             );
         }
 

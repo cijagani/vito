@@ -144,7 +144,7 @@ class UpdateBasicAuth
                 'lines' => $lines,
                 'userCount' => count($users),
                 'usernames' => $usernames,
-                'nginxUser' => $site->server->getSshUser(),
+                'nginxUser' => Nginx::WORKER_USER,
             ]),
             'write-basic-auth-file',
             $site->id,

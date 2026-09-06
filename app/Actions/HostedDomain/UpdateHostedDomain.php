@@ -2,6 +2,7 @@
 
 namespace App\Actions\HostedDomain;
 
+use App\Actions\Site\SyncSiteReservations;
 use App\Enums\HostedDomainStatus;
 use App\Enums\HostedDomainType;
 use App\Enums\SslMethod;
@@ -9,6 +10,7 @@ use App\Jobs\HostedDomain\CheckDomainJob;
 use App\Models\HostedDomain;
 use App\Models\Site;
 use App\Models\Ssl;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -27,20 +29,14 @@ class UpdateHostedDomain
         }
 
         $validated = $this->validate($hostedDomain, $site, $input);
+        if (isset($validated['domain']) && is_string($validated['domain'])) {
+            $validated['domain'] = strtolower($validated['domain']);
+        }
 
         $isPrimary = $hostedDomain->type === HostedDomainType::PRIMARY;
         $domainChanged = ! $isPrimary && $hostedDomain->domain !== $validated['domain'];
         $sslMethodChangedToLE = SslMethod::from($validated['ssl_method']) === SslMethod::LETSENCRYPT
             && $hostedDomain->ssl_method !== SslMethod::LETSENCRYPT;
-
-        if (! $isPrimary) {
-            $hostedDomain->domain = $validated['domain'];
-            $hostedDomain->type = $validated['type'];
-        }
-
-        $hostedDomain->ssl_method = SslMethod::from($validated['ssl_method']);
-        $hostedDomain->ssl_id = $validated['ssl_method'] === SslMethod::CUSTOM->value ? (int) $validated['ssl_id'] : null;
-        $hostedDomain->error = null;
 
         $needsDnsRecheck = $domainChanged
             && in_array($hostedDomain->status, [HostedDomainStatus::ACTIVE, HostedDomainStatus::PENDING]);
@@ -48,11 +44,30 @@ class UpdateHostedDomain
         $needsSslActivation = ! $domainChanged && $sslMethodChangedToLE
             && $hostedDomain->status === HostedDomainStatus::ACTIVE;
 
-        if ($needsDnsRecheck || $needsSslActivation) {
-            $hostedDomain->status = HostedDomainStatus::UPDATING;
-        }
+        DB::transaction(function () use (
+            $hostedDomain,
+            $site,
+            $validated,
+            $isPrimary,
+            $needsDnsRecheck,
+            $needsSslActivation,
+        ): void {
+            if (! $isPrimary) {
+                $hostedDomain->domain = strtolower($validated['domain']);
+                $hostedDomain->type = $validated['type'];
+            }
 
-        $hostedDomain->save();
+            $hostedDomain->ssl_method = SslMethod::from($validated['ssl_method']);
+            $hostedDomain->ssl_id = $validated['ssl_method'] === SslMethod::CUSTOM->value ? (int) $validated['ssl_id'] : null;
+            $hostedDomain->error = null;
+
+            if ($needsDnsRecheck || $needsSslActivation) {
+                $hostedDomain->status = HostedDomainStatus::UPDATING;
+            }
+
+            $hostedDomain->save();
+            app(SyncSiteReservations::class)->sync($site);
+        });
 
         $this->dispatchAction($hostedDomain, $needsDnsRecheck, $needsSslActivation);
 

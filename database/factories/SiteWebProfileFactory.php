@@ -17,7 +17,7 @@ class SiteWebProfileFactory extends Factory
         return [
             'site_id' => Site::factory(),
             'static_cache_policy' => 'default',
-            'symlink_policy' => 'legacy',
+            'symlink_policy' => 'if_not_owner',
             'access_log_enabled' => true,
             'desired_revision' => 1,
             'applied_revision' => null,

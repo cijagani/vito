@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\IsolatedUserManagementState;
 use Database\Factories\IsolatedUserFactory;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -17,6 +18,8 @@ use Throwable;
  * @property string $username
  * @property ?string $ssh_key
  * @property ?array<string, array{version?: string, status?: ?string}> $installed_tooling
+ * @property IsolatedUserManagementState $management_state
+ * @property ?\Carbon\Carbon $managed_at
  * @property Server $server
  * @property Collection<int, Site> $sites
  */
@@ -30,12 +33,16 @@ class IsolatedUser extends AbstractModel
         'username',
         'ssh_key',
         'installed_tooling',
+        'management_state',
+        'managed_at',
     ];
 
     protected $casts = [
         'server_id' => 'integer',
         'ssh_key' => 'encrypted',
         'installed_tooling' => 'array',
+        'management_state' => IsolatedUserManagementState::class,
+        'managed_at' => 'datetime',
     ];
 
     /**
