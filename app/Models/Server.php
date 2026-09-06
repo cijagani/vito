@@ -31,6 +31,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -68,6 +69,9 @@ use Throwable;
  * @property Collection<int, Worker> $queues
  * @property Collection<int, Backup> $backups
  * @property Collection<int, SshKey> $sshKeys
+ * @property Collection<int, ServerHostnameReservation> $hostnameReservations
+ * @property Collection<int, ServerPortReservation> $portReservations
+ * @property Collection<int, SiteRuntimeOperation> $runtimeOperations
  * @property string $hostname
  * @property int $updates
  * @property int $kernel_updates
@@ -251,6 +255,21 @@ class Server extends AbstractModel
         return $this->hasMany(IsolatedUser::class);
     }
 
+    public function hostnameReservations(): HasMany
+    {
+        return $this->hasMany(ServerHostnameReservation::class);
+    }
+
+    public function portReservations(): HasMany
+    {
+        return $this->hasMany(ServerPortReservation::class);
+    }
+
+    public function runtimeOperations(): HasMany
+    {
+        return $this->hasMany(SiteRuntimeOperation::class);
+    }
+
     /**
      * @return HasMany<Service, covariant $this>
      */
@@ -380,6 +399,15 @@ class Server extends AbstractModel
     public function isolatedUserLock(string $user): Lock
     {
         return Cache::lock("isolate:{$this->id}:{$user}", 60);
+    }
+
+    public function runtimeLock(): Lock
+    {
+        if (! $this->exists || ! is_int($this->getKey())) {
+            throw new RuntimeException('A persisted server is required for a runtime lock.');
+        }
+
+        return Cache::lock("site-runtime:server:{$this->id}", 300);
     }
 
     /**

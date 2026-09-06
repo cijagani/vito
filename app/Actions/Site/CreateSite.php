@@ -99,6 +99,7 @@ class CreateSite
 
             // save
             $site->save();
+            app(SyncSiteRuntimeProfiles::class)->sync($site);
 
             $defaultSslMethod = $webserverHandler->defaultSslMethod();
 

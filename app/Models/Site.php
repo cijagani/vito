@@ -22,15 +22,18 @@ use App\SiteTypes\BunSite;
 use App\SiteTypes\NodeSite;
 use App\SiteTypes\SiteType;
 use App\SourceControlProviders\GithubApp;
+use App\Support\SiteRuntimeArtifacts;
 use App\Tooling\ToolingRegistry;
 use App\Traits\HasProjectThroughServer;
 use Database\Factories\SiteFactory;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -82,6 +85,11 @@ use RuntimeException;
  * @property Project $project
  * @property Collection<int, Redirect> $redirects
  * @property Collection<int, Redirect> $activeRedirects
+ * @property ?SiteRuntimeProfile $runtimeProfile
+ * @property ?SiteWebProfile $webProfile
+ * @property Collection<int, ServerHostnameReservation> $hostnameReservations
+ * @property Collection<int, ServerPortReservation> $portReservations
+ * @property Collection<int, SiteRuntimeOperation> $runtimeOperations
  */
 class Site extends AbstractModel
 {
@@ -285,6 +293,45 @@ class Site extends AbstractModel
     public function isolatedUser(): BelongsTo
     {
         return $this->belongsTo(IsolatedUser::class);
+    }
+
+    public function runtimeProfile(): HasOne
+    {
+        return $this->hasOne(SiteRuntimeProfile::class);
+    }
+
+    public function webProfile(): HasOne
+    {
+        return $this->hasOne(SiteWebProfile::class);
+    }
+
+    public function hostnameReservations(): HasMany
+    {
+        return $this->hasMany(ServerHostnameReservation::class);
+    }
+
+    public function portReservations(): HasMany
+    {
+        return $this->hasMany(ServerPortReservation::class);
+    }
+
+    public function runtimeOperations(): HasMany
+    {
+        return $this->hasMany(SiteRuntimeOperation::class);
+    }
+
+    public function runtimeLock(): Lock
+    {
+        if (! $this->exists || ! is_int($this->getKey())) {
+            throw new RuntimeException('A persisted site is required for a runtime lock.');
+        }
+
+        return Cache::lock("site-runtime:{$this->server_id}:{$this->id}", 300);
+    }
+
+    public function runtimeArtifacts(): SiteRuntimeArtifacts
+    {
+        return SiteRuntimeArtifacts::fromSite($this);
     }
 
     public function getUserAttribute(?string $value): ?string

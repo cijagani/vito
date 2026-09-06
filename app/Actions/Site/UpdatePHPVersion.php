@@ -64,6 +64,7 @@ class UpdatePHPVersion
 
                     $site->php_version = $newVersion;
                     $site->save();
+                    app(SyncSiteRuntimeProfiles::class)->sync($site);
 
                     $site->webserver()->updateVHost($site);
                 } catch (Throwable $e) {
@@ -87,6 +88,7 @@ class UpdatePHPVersion
 
         $site->php_version = $newVersion;
         $site->save();
+        app(SyncSiteRuntimeProfiles::class)->sync($site);
 
         $site->webserver()->updateVHost($site);
     }

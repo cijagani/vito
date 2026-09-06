@@ -20,6 +20,7 @@ class UpdatePHPSettings
         $typeData = $site->type_data ?? [];
         $typeData['php'] = $validated;
         $site->update(['type_data' => $typeData]);
+        app(SyncSiteRuntimeProfiles::class)->sync($site);
 
         $site->webserver()->updateVHost($site);
 
