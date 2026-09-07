@@ -27,20 +27,9 @@ export default function CronJobForm({
   site?: Site;
   cronJob?: CronJob;
 }) {
-  const page = usePage<SharedData & { server: Server; sites?: Array<{ id: number; domain: string }>; ssh_users?: string[] }>();
+  const page = usePage<SharedData & { server: Server; sites?: Array<{ id: number; domain: string; user: string; isolated_user_id: number | null }>; ssh_users?: string[] }>();
   const configs = useConfigs()!;
 
-  const sshUsers = useMemo(() => {
-    if (site?.isolated_user_id) {
-      return [site.user];
-    }
-
-    const base = site ? (page.props.ssh_users ?? []) : page.props.server.ssh_users;
-    if (cronJob?.user && !base.includes(cronJob.user)) {
-      return [...base, cronJob.user];
-    }
-    return base;
-  }, [site, page.props.ssh_users, page.props.server.ssh_users, cronJob?.user]);
   const form = useForm<{
     name: string;
     command: string;
@@ -56,6 +45,22 @@ export default function CronJobForm({
     custom: cronJob?.frequency || '',
     site_id: cronJob?.site_id?.toString() || '0',
   });
+  const selectedSite = page.props.sites?.find((siteOption) => siteOption.id.toString() === form.data.site_id);
+  const sshUsers = useMemo(() => {
+    if (site?.isolated_user_id) {
+      return [site.user];
+    }
+
+    if (selectedSite?.isolated_user_id) {
+      return [selectedSite.user];
+    }
+
+    const base = site ? (page.props.ssh_users ?? []) : page.props.server.ssh_users;
+    if (cronJob?.user && !base.includes(cronJob.user)) {
+      return [...base, cronJob.user];
+    }
+    return base;
+  }, [site, selectedSite, page.props.ssh_users, page.props.server.ssh_users, cronJob?.user]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -106,7 +111,17 @@ export default function CronJobForm({
             {page.props.sites && !site && (
               <FormField>
                 <Label htmlFor="site_id">Belongs to</Label>
-                <Select value={form.data.site_id} onValueChange={(value) => form.setData('site_id', value)}>
+                <Select
+                  value={form.data.site_id}
+                  onValueChange={(value) => {
+                    const selected = page.props.sites?.find((siteOption) => siteOption.id.toString() === value);
+                    form.setData((data) => ({
+                      ...data,
+                      site_id: value,
+                      user: selected?.isolated_user_id ? selected.user : data.user,
+                    }));
+                  }}
+                >
                   <SelectTrigger id="site_id">
                     <SelectValue placeholder="Select a site (optional)" />
                   </SelectTrigger>

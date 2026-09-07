@@ -27,8 +27,7 @@ export default function WorkerForm({
   site?: Site;
   worker?: Worker;
 }) {
-  const page = usePage<SharedData & { server: Server; sites?: Array<{ id: number; domain: string }> }>();
-  const availableUsers = site?.isolated_user_id ? [site.user] : page.props.server.ssh_users;
+  const page = usePage<SharedData & { server: Server; sites?: Array<{ id: number; domain: string; user: string; isolated_user_id: number | null }> }>();
   const form = useForm<{
     name: string;
     command: string;
@@ -46,6 +45,9 @@ export default function WorkerForm({
     numprocs: worker?.numprocs.toString() || '',
     site_id: worker?.site_id?.toString() || '0',
   });
+  const selectedSite = page.props.sites?.find((siteOption) => siteOption.id.toString() === form.data.site_id);
+  const isolatedSite = site?.isolated_user_id ? site : selectedSite?.isolated_user_id ? selectedSite : null;
+  const availableUsers = isolatedSite ? [isolatedSite.user] : page.props.server.ssh_users;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -92,7 +94,17 @@ export default function WorkerForm({
             {page.props.sites && !site && (
               <FormField>
                 <Label htmlFor="site_id">Site</Label>
-                <Select value={form.data.site_id} onValueChange={(value) => form.setData('site_id', value)}>
+                  <Select
+                    value={form.data.site_id}
+                    onValueChange={(value) => {
+                      const selected = page.props.sites?.find((siteOption) => siteOption.id.toString() === value);
+                      form.setData((data) => ({
+                        ...data,
+                        site_id: value,
+                        user: selected?.isolated_user_id ? selected.user : data.user,
+                      }));
+                    }}
+                  >
                   <SelectTrigger id="site_id">
                     <SelectValue placeholder="Select a site (optional)" />
                   </SelectTrigger>

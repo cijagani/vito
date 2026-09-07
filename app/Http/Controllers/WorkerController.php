@@ -46,7 +46,7 @@ class WorkerController extends Controller
                     ->latest()
                     ->simplePaginate(config('web.pagination_size'))
             ),
-            'sites' => $server->sites()->select('id', 'domain')->get(),
+            'sites' => $server->sites()->select('id', 'domain', 'user', 'isolated_user_id')->get(),
         ]);
     }
 
@@ -62,7 +62,7 @@ class WorkerController extends Controller
                     ->latest()
                     ->simplePaginate(config('web.pagination_size'))
             ),
-            'sites' => $server->sites()->select('id', 'domain')->get(),
+            'sites' => $server->sites()->select('id', 'domain', 'user', 'isolated_user_id')->get(),
         ]);
     }
 

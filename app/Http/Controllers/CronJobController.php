@@ -35,7 +35,7 @@ class CronJobController extends Controller
 
         return Inertia::render('cronjobs/index', [
             'cronjobs' => CronJobResource::collection($server->cronJobs()->where('hidden', false)->latest()->simplePaginate(config('web.pagination_size'))),
-            'sites' => $server->sites()->select('id', 'domain')->get(),
+            'sites' => $server->sites()->select('id', 'domain', 'user', 'isolated_user_id')->get(),
         ]);
     }
 
@@ -118,7 +118,7 @@ class CronJobController extends Controller
             'cronjobs' => CronJobResource::collection(
                 $site->cronJobs()->latest()->simplePaginate(config('web.pagination_size'))
             ),
-            'sites' => $server->sites()->select('id', 'domain')->get(),
+            'sites' => $server->sites()->select('id', 'domain', 'user', 'isolated_user_id')->get(),
             'ssh_users' => $site->getSshUsers(),
         ]);
     }
