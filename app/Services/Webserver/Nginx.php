@@ -136,7 +136,7 @@ class Nginx extends AbstractWebserver implements HasLogs
     public function deleteSite(Site $site): void
     {
         $path = $site->basePath();
-        if ($path !== '/home/'.$site->user.'/'.$site->domain) {
+        if ($path !== $site->homeDirectory().'/'.$site->domain) {
             throw new LogicException('Refusing to delete an unsafe Nginx site path.');
         }
 

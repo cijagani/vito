@@ -3,6 +3,7 @@
 namespace App\Jobs\Site;
 
 use App\DTOs\SocketEventDTO;
+use App\Actions\Site\ApplySiteFilesystemQuota;
 use App\Enums\SiteStatus;
 use App\Events\SiteCreatedEvent;
 use App\Events\SocketEvent;
@@ -38,6 +39,7 @@ class CreateJob implements ShouldQueue
     {
         $this->run("server-{$this->site->server_id}", function () {
             $this->site->type()->install();
+            app(ApplySiteFilesystemQuota::class)->apply($this->site);
             $this->site->status = SiteStatus::READY;
             $this->site->progress = 100;
             $this->site->progress_step = null;

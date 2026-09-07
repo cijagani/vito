@@ -43,6 +43,7 @@ export interface Site {
     memory_high_mb: number | null;
     memory_max_mb: number | null;
     tasks_max: number | null;
+    disk_quota_mb: number | null;
     client_max_body_size_mb: number | null;
     fastcgi_read_timeout_seconds: number | null;
     proxy_connect_timeout_seconds: number | null;

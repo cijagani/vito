@@ -10,7 +10,7 @@ case "$VITO_WORKING_DIRECTORY/" in
         export PHP_BINARY={!! escapeshellarg('/usr/bin/php'.$runtimeSite->php_version) !!}
         export PHP_PATH="$PHP_BINARY"
         export PHP_INI_SCAN_DIR={!! escapeshellarg('/etc/php/'.$runtimeSite->php_version.'/cli/conf.d:'.$runtimeSite->runtimeArtifacts()->phpCliIniDirectory()) !!}
-        export TMPDIR={!! escapeshellarg('/home/'.$runtimeSite->user.'/tmp/'.$runtimeSite->runtimeArtifacts()->key()) !!}
+        export TMPDIR={!! escapeshellarg($runtimeSite->homeDirectory().'/tmp/'.$runtimeSite->runtimeArtifacts()->key()) !!}
         ;;
 @endforeach
     *)

@@ -22,7 +22,7 @@ class PrepareSiteFpmFilesystem
             view('ssh.services.php.prepare-site-fpm-filesystem', [
                 'siteUser' => $site->user,
                 'webserverUser' => $webserverUser,
-                'temporaryPath' => '/home/'.$site->user.'/tmp/'.$artifacts->key(),
+                'temporaryPath' => $site->homeDirectory().'/tmp/'.$artifacts->key(),
                 'logDirectory' => $artifacts->logDirectory(),
                 'stateDirectory' => $artifacts->fpmStateDirectory($phpVersion),
             ]),

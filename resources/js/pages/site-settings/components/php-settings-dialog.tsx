@@ -29,6 +29,7 @@ type RuntimeTuningForm = {
   memory_high_mb: string;
   memory_max_mb: string;
   tasks_max: string;
+  disk_quota_mb: string;
   client_max_body_size_mb: string;
   fastcgi_read_timeout_seconds: string;
   proxy_connect_timeout_seconds: string;
@@ -86,6 +87,7 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
     memory_high_mb: value(tuning?.memory_high_mb),
     memory_max_mb: value(tuning?.memory_max_mb),
     tasks_max: value(tuning?.tasks_max),
+    disk_quota_mb: value(tuning?.disk_quota_mb),
     client_max_body_size_mb: value(tuning?.client_max_body_size_mb),
     fastcgi_read_timeout_seconds: value(tuning?.fastcgi_read_timeout_seconds),
     proxy_connect_timeout_seconds: value(tuning?.proxy_connect_timeout_seconds),
@@ -116,6 +118,7 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
       memory_high_mb: nullableNumber(data.memory_high_mb),
       memory_max_mb: nullableNumber(data.memory_max_mb),
       tasks_max: nullableNumber(data.tasks_max),
+      disk_quota_mb: nullableNumber(data.disk_quota_mb),
       client_max_body_size_mb: nullableNumber(data.client_max_body_size_mb),
       fastcgi_read_timeout_seconds: nullableNumber(data.fastcgi_read_timeout_seconds),
       proxy_connect_timeout_seconds: nullableNumber(data.proxy_connect_timeout_seconds),
@@ -183,6 +186,16 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
               <NumericField id="tasks_max" label="Maximum tasks" hint="Optional maximum processes and threads." min={1} max={1000000} value={form.data.tasks_max} error={form.errors.tasks_max} onChange={(next) => form.setData('tasks_max', next)} />
               <NumericField id="memory_high_mb" label="Memory high (MB)" hint="Optional pressure threshold before the hard limit." min={1} max={1048576} value={form.data.memory_high_mb} error={form.errors.memory_high_mb} onChange={(next) => form.setData('memory_high_mb', next)} />
               <NumericField id="memory_max_mb" label="Memory max (MB)" hint="Optional hard cgroup memory limit." min={1} max={1048576} value={form.data.memory_max_mb} error={form.errors.memory_max_mb} onChange={(next) => form.setData('memory_max_mb', next)} />
+            </div>
+          </section>}
+
+          {tuning && <section className="space-y-3">
+            <div>
+              <h3 className="font-medium">Filesystem quota</h3>
+              <p className="text-muted-foreground text-xs">A hard limit for files owned by this site's Linux user on the site-storage filesystem. Nginx access and error logs are owned separately and are not charged to it.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <NumericField id="disk_quota_mb" label="Disk quota (MB)" hint="Optional hard filesystem limit; requires one Linux user per site." min={1} max={1048576} value={form.data.disk_quota_mb} error={form.errors.disk_quota_mb} onChange={(next) => form.setData('disk_quota_mb', next)} />
             </div>
           </section>}
 

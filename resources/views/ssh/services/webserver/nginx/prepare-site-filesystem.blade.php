@@ -1,4 +1,5 @@
 VITO_SITE_USER={!! escapeshellarg($siteUser) !!}
+VITO_HOME={!! escapeshellarg($homeDirectory) !!}
 VITO_NGINX_USER={!! escapeshellarg($workerUser) !!}
 VITO_SITE_PATH={!! escapeshellarg($sitePath) !!}
 VITO_WEB_ROOT={!! escapeshellarg($webRoot) !!}
@@ -22,7 +23,7 @@ sudo install -d -o "$VITO_SITE_USER" -g "$VITO_SITE_USER" -m 0700 "$VITO_TEMP_PA
 @if ($createWebRoot)
 sudo install -d -o "$VITO_SITE_USER" -g "$VITO_SITE_USER" -m 0750 "$VITO_WEB_ROOT"
 @endif
-sudo setfacl -m u:"$VITO_NGINX_USER":--x "/home/$VITO_SITE_USER" "$VITO_SITE_PATH"
+sudo setfacl -m u:"$VITO_NGINX_USER":--x "$VITO_HOME" "$VITO_SITE_PATH"
 if sudo test -d "$VITO_WEB_ROOT"; then
     sudo find "$VITO_WEB_ROOT" -type d -exec setfacl -m u:"$VITO_NGINX_USER":r-x,d:u:"$VITO_NGINX_USER":r-x {} +
     sudo find "$VITO_WEB_ROOT" -type f -exec setfacl -m u:"$VITO_NGINX_USER":r-- {} +
@@ -34,4 +35,4 @@ sudo touch "$VITO_LOG_PATH/access.log" "$VITO_LOG_PATH/error.log"
 sudo chown "$VITO_NGINX_USER:$VITO_NGINX_USER" "$VITO_LOG_PATH/access.log" "$VITO_LOG_PATH/error.log"
 sudo chmod 0640 "$VITO_LOG_PATH/access.log" "$VITO_LOG_PATH/error.log"
 
-unset VITO_SITE_USER VITO_NGINX_USER VITO_SITE_PATH VITO_WEB_ROOT VITO_TEMP_PATH VITO_LOG_PATH VITO_STATE_PATH
+unset VITO_SITE_USER VITO_HOME VITO_NGINX_USER VITO_SITE_PATH VITO_WEB_ROOT VITO_TEMP_PATH VITO_LOG_PATH VITO_STATE_PATH

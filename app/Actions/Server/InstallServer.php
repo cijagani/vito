@@ -61,6 +61,7 @@ class InstallServer
         $this->server->os()->upgrade();
         $this->progress(25, 'installing-dependencies');
         $this->server->os()->installDependencies();
+        app(ConfigureSiteStorage::class)->configure($this->server);
         $services = $this->server->services;
         $currentProgress = 45;
         $progressPerService = count($services) ? (100 - $currentProgress) / count($services) : 0;

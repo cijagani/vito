@@ -28,6 +28,6 @@ abstract class AbstractMiseTooling extends AbstractTooling
 
     public function pathContributions(Site $site): array
     {
-        return ['/home/'.$site->user.'/.local/share/mise/shims'];
+        return [$site->homeDirectory().'/.local/share/mise/shims'];
     }
 }

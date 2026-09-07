@@ -14,9 +14,9 @@ pm.min_spare_servers = 1
 pm.max_spare_servers = 3
 pm.max_requests = 500
 
-php_admin_value[open_basedir] = /home/{{ $user }}/:/tmp/
-php_admin_value[upload_tmp_dir] = /home/{{ $user }}/tmp
-php_admin_value[session.save_path] = /home/{{ $user }}/tmp
+php_admin_value[open_basedir] = {{ $homeDirectory }}/:/tmp/
+php_admin_value[upload_tmp_dir] = {{ $homeDirectory }}/tmp
+php_admin_value[session.save_path] = {{ $homeDirectory }}/tmp
 php_admin_value[display_errors] = off
 php_admin_value[log_errors] = on
-php_admin_value[error_log] = /home/{{ $user }}/.logs/php_errors.log
+php_admin_value[error_log] = {{ $homeDirectory }}/.logs/php_errors.log

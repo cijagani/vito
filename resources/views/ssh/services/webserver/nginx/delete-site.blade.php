@@ -1,7 +1,7 @@
 VITO_SITE_PATH={!! escapeshellarg($path) !!}
 
 case "$VITO_SITE_PATH" in
-    /home/*/*) ;;
+    /srv/vito/sites/*/*) ;;
     *) echo 'VITO_SSH_ERROR: refusing to delete an unsafe site path' && exit 1 ;;
 esac
 case "$VITO_SITE_PATH" in

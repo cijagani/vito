@@ -66,6 +66,6 @@ class ComposerTooling extends AbstractTooling
 
     public function pathContributions(Site $site): array
     {
-        return ['/home/'.$site->user.'/'.self::INSTALL_DIR];
+        return [$site->homeDirectory().'/'.self::INSTALL_DIR];
     }
 }

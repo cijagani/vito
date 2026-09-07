@@ -1,5 +1,5 @@
 if [ "{{ $isIsolated }}" == "true" ]; then
-    cd /home/{{ $isolatedUsername }}
+    cd {!! escapeshellarg($homeDirectory) !!}
 else
     cd /tmp
 fi
@@ -13,8 +13,8 @@ if ! chmod +x wp-cli.phar; then
 fi
 
 if [ "{{ $isIsolated }}" == "true" ]; then
-    mv wp-cli.phar /home/{{ $isolatedUsername }}/bin/
-    ln -sf /home/{{ $isolatedUsername }}/bin/wp-cli.phar /home/{{ $isolatedUsername }}/bin/wp
+    mv wp-cli.phar {!! escapeshellarg($homeDirectory.'/bin/') !!}
+    ln -sf {!! escapeshellarg($homeDirectory.'/bin/wp-cli.phar') !!} {!! escapeshellarg($homeDirectory.'/bin/wp') !!}
 else
     if ! sudo mv wp-cli.phar /usr/local/bin/wp; then
         echo 'VITO_SSH_ERROR' && exit 1

@@ -7,6 +7,7 @@ use App\Exceptions\SSHError;
 use App\Models\Server;
 use App\Models\ServerLog;
 use App\Models\Site;
+use App\Support\SiteStorage;
 use RuntimeException;
 
 class OS
@@ -129,6 +130,7 @@ class OS
         $this->server->ssh()->exec(
             view('ssh.os.create-isolated-user', [
                 'user' => $user,
+                'homeDirectory' => SiteStorage::homeDirectory($user),
                 'password' => $password,
                 'key' => escapeshellarg(trim($this->server->sshKey()['public_key'])),
                 'allowExisting' => $allowExisting,

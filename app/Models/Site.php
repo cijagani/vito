@@ -23,6 +23,7 @@ use App\SiteTypes\NodeSite;
 use App\SiteTypes\SiteType;
 use App\SourceControlProviders\GithubApp;
 use App\Support\SiteRuntimeArtifacts;
+use App\Support\SiteStorage;
 use App\Tooling\ToolingRegistry;
 use App\Traits\HasProjectThroughServer;
 use Database\Factories\SiteFactory;
@@ -632,6 +633,11 @@ class Site extends AbstractModel
         }
 
         return $this->path;
+    }
+
+    public function homeDirectory(): string
+    {
+        return SiteStorage::homeDirectory((string) $this->user);
     }
 
     /**

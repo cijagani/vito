@@ -33,10 +33,11 @@ class EnsureSitePhpCli
 
         if ($sharedUser) {
             $site->server->ssh()->write(
-                '/home/'.$site->user.'/bin/php',
+                $site->homeDirectory().'/bin/php',
                 view('ssh.services.php.site-php-cli-wrapper', [
                     'defaultPhpBinary' => '/usr/bin/php'.$site->php_version,
                     'defaultIniScanDirectory' => '/etc/php/'.$site->php_version.'/cli/conf.d',
+                    'homeDirectory' => $site->homeDirectory(),
                     'runtimeSites' => $runtimeSites,
                 ]),
                 'root',
@@ -51,6 +52,7 @@ class EnsureSitePhpCli
                 'profilePath' => $artifacts->phpCliProfilePath(),
                 'iniScanDirectory' => '/etc/php/'.$site->php_version.'/cli/conf.d:'.$artifacts->phpCliIniDirectory(),
                 'sharedUser' => $sharedUser,
+                'homeDirectory' => $site->homeDirectory(),
             ]),
             'activate-site-php-cli',
             $site->id,
@@ -70,6 +72,7 @@ class EnsureSitePhpCli
         $site->server->ssh()->exec(
             view('ssh.services.php.prepare-site-php-cli', [
                 'siteUser' => $site->user,
+                'homeDirectory' => $site->homeDirectory(),
                 'runtimeDirectory' => $artifacts->phpCliIniDirectory(),
             ]),
             'prepare-site-php-cli',
@@ -79,13 +82,14 @@ class EnsureSitePhpCli
             $artifacts->phpCliIniPath(),
             view('ssh.services.php.site-php-cli-ini', [
                 'siteUser' => $site->user,
+                'homeDirectory' => $site->homeDirectory(),
                 'memoryLimitMb' => $profile->memory_limit_mb,
                 'maxExecutionTimeSeconds' => $profile->max_execution_time_seconds,
                 'maxInputTimeSeconds' => $profile->max_input_time_seconds,
                 'maxInputVars' => $profile->max_input_vars,
                 'postMaxSizeMb' => $profile->post_max_size_mb,
                 'uploadMaxFilesizeMb' => $profile->upload_max_filesize_mb,
-                'temporaryPath' => '/home/'.$site->user.'/tmp/'.$artifacts->key(),
+                'temporaryPath' => $site->homeDirectory().'/tmp/'.$artifacts->key(),
             ]),
             'root',
         );
@@ -96,8 +100,8 @@ class EnsureSitePhpCli
                 'phpVersion' => $site->php_version,
                 'phpBinary' => '/usr/bin/php'.$site->php_version,
                 'iniScanDirectory' => '/etc/php/'.$site->php_version.'/cli/conf.d:'.$artifacts->phpCliIniDirectory(),
-                'siteBin' => '/home/'.$site->user.'/bin',
-                'temporaryPath' => '/home/'.$site->user.'/tmp/'.$artifacts->key(),
+                'siteBin' => $site->homeDirectory().'/bin',
+                'temporaryPath' => $site->homeDirectory().'/tmp/'.$artifacts->key(),
             ]),
             'root',
         );

@@ -119,6 +119,7 @@ class Wordpress extends PHPSite
                 'domain' => $this->site->domain,
                 'isIsolated' => $this->site->isIsolated() ? 'true' : 'false',
                 'isolatedUsername' => $this->site->user,
+                'homeDirectory' => $this->site->homeDirectory(),
                 'dbName' => $this->site->type_data['database'],
                 'dbUser' => $this->site->type_data['database_user'],
                 'dbPass' => $this->site->type_data['database_password'],

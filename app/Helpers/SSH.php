@@ -8,6 +8,8 @@ use App\Exceptions\SSHConnectionError;
 use App\Exceptions\SSHError;
 use App\Models\Server;
 use App\Models\ServerLog;
+use App\Models\IsolatedUser;
+use App\Support\SiteStorage;
 use Exception;
 use Illuminate\Contracts\View\View;
 use Illuminate\Filesystem\FilesystemAdapter;
@@ -263,7 +265,7 @@ class SSH
         $sftp = $this->ensureSftp();
 
         $tmpName = Str::random(10).strtotime('now');
-        $tempPath = home_path($this->user).'/'.$tmpName;
+        $tempPath = $this->temporaryUploadDirectory().'/'.$tmpName;
 
         $sftp->put($tempPath, $local, SFTP::SOURCE_LOCAL_FILE);
 
@@ -273,6 +275,20 @@ class SSH
         }
         $this->exec(sprintf('sudo chown %s:%s %s', $owner, $owner, $remote));
         $this->exec(sprintf('sudo chmod %s %s', $permission, $remote));
+    }
+
+    private function temporaryUploadDirectory(): string
+    {
+        if ($this->asUser === null) {
+            return home_path($this->user);
+        }
+
+        $isolated = IsolatedUser::query()
+            ->where('server_id', $this->server->id)
+            ->where('username', $this->asUser)
+            ->exists();
+
+        return $isolated ? SiteStorage::homeDirectory($this->asUser) : home_path($this->asUser);
     }
 
     /**

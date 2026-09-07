@@ -143,6 +143,7 @@ class SiteResource extends JsonResource
             'memory_high_mb' => $runtime->memory_high_mb,
             'memory_max_mb' => $runtime->memory_max_mb,
             'tasks_max' => $runtime->tasks_max,
+            'disk_quota_mb' => $runtime->disk_quota_mb,
             'client_max_body_size_mb' => $web->client_max_body_size_mb,
             'fastcgi_read_timeout_seconds' => $web->fastcgi_read_timeout_seconds,
             'proxy_connect_timeout_seconds' => $web->proxy_connect_timeout_seconds,

@@ -66,6 +66,7 @@ class DeleteSite
             $isLastSibling = ! $site->userSharedWithSiblings();
 
             if ($isLastSibling) {
+                app(ApplySiteFilesystemQuota::class)->remove($site);
                 $webserverUser = $site->webserver()::id() === Nginx::id()
                     ? Nginx::WORKER_USER
                     : $site->server->getSshUser();

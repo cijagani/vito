@@ -16,7 +16,7 @@ final class SiteShellEnvironment
             return [];
         }
 
-        $paths = ['/home/'.$site->user.'/bin'];
+        $paths = [$site->homeDirectory().'/bin'];
         foreach (ToolingRegistry::all() as $tool) {
             if ($tool->installedVersion($site) === null) {
                 continue;
@@ -28,7 +28,7 @@ final class SiteShellEnvironment
             }
         }
 
-        $base = "/usr/local/bin:/usr/bin:/bin:/home/{$site->user}/.local/bin";
+        $base = '/usr/local/bin:/usr/bin:/bin:'.$site->homeDirectory().'/.local/bin';
 
         $environment = [
             'VITO_SITE_ID' => (string) $site->id,
@@ -41,7 +41,7 @@ final class SiteShellEnvironment
             $environment['PHP_BINARY'] = self::phpBinary($site);
             $environment['PHP_PATH'] = self::phpBinary($site);
             $environment['PHP_INI_SCAN_DIR'] = '/etc/php/'.$site->php_version.'/cli/conf.d:'.$artifacts->phpCliIniDirectory();
-            $environment['TMPDIR'] = '/home/'.$site->user.'/tmp/'.$artifacts->key();
+            $environment['TMPDIR'] = $site->homeDirectory().'/tmp/'.$artifacts->key();
         }
 
         return $environment;

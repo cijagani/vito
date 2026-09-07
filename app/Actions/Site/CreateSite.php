@@ -14,8 +14,8 @@ use App\Models\IsolatedUser;
 use App\Models\Server;
 use App\Models\Service;
 use App\Models\Site;
+use App\Support\SiteStorage;
 use App\Services\Webserver\Webserver;
-use App\Tooling\ToolingRegistry;
 use App\ValidationRules\DomainRule;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -35,8 +35,6 @@ class CreateSite
     public function create(Server $server, array $input): Site
     {
         $input = $this->normalizeHostnames($input);
-        $input = $this->lockRuntimeVersionsToExistingUser($server, $input);
-
         $this->validate($server, $input);
 
         DB::beginTransaction();
@@ -50,9 +48,9 @@ class CreateSite
                     ['management_state' => IsolatedUserManagementState::PENDING],
                 );
 
-                if (! $isolatedUser->wasRecentlyCreated && ! filter_var($input['shared_user'] ?? false, FILTER_VALIDATE_BOOL)) {
+                if (! $isolatedUser->wasRecentlyCreated) {
                     throw ValidationException::withMessages([
-                        'user' => 'This user was claimed concurrently. Confirm shared trust-group reuse to continue.',
+                        'user' => 'Each new isolated site requires its own Linux user.',
                     ]);
                 }
             }
@@ -63,7 +61,7 @@ class CreateSite
                 'type' => $input['type'],
                 'domain' => $input['domain'],
                 'user' => $user,
-                'path' => '/home/'.$user.'/'.$input['domain'],
+                'path' => SiteStorage::homeDirectory($user).'/'.$input['domain'],
                 'status' => SiteStatus::INSTALLING,
             ]);
 
@@ -182,6 +180,10 @@ class CreateSite
 
         $validator = Validator::make($input, array_merge($rules, $this->typeRules($server, $input)));
         $validator->after(function ($validator) use ($server, $input): void {
+            if (filter_var($input['shared_user'] ?? false, FILTER_VALIDATE_BOOL)) {
+                $validator->errors()->add('shared_user', 'Shared Linux users are not available on isolated servers.');
+            }
+
             $aliases = isset($input['aliases']) && is_array($input['aliases']) ? $input['aliases'] : [];
             if (in_array($input['domain'] ?? null, $aliases, true)) {
                 $validator->errors()->add('aliases', 'The primary domain cannot also be an alias.');
@@ -196,17 +198,11 @@ class CreateSite
                 ->where('server_id', $server->id)
                 ->where('username', $user)
                 ->exists();
-            $shared = filter_var($input['shared_user'] ?? false, FILTER_VALIDATE_BOOL);
-
-            if ($exists && ! $shared) {
+            if ($exists) {
                 $validator->errors()->add(
                     'user',
-                    'This user already hosts sites. Confirm shared trust-group reuse to continue.'
+                    'Each new isolated site requires its own Linux user.'
                 );
-            }
-
-            if (! $exists && $shared) {
-                $validator->errors()->add('shared_user', 'A new isolated user cannot be marked as shared.');
             }
         });
         $validator->validate();
@@ -228,68 +224,6 @@ class CreateSite
         );
 
         return $site->type()->createRules($input);
-    }
-
-    /**
-     * @param  array<string, mixed>  $input
-     * @return array<string, mixed>
-     */
-    private function lockRuntimeVersionsToExistingUser(Server $server, array $input): array
-    {
-        $user = isset($input['user']) && is_string($input['user']) ? $input['user'] : '';
-
-        if ($user === '' || preg_match(self::ISOLATED_USER_PATTERN, $user) !== 1) {
-            return $input;
-        }
-
-        $iuser = IsolatedUser::query()
-            ->where('server_id', $server->id)
-            ->where('username', $user)
-            ->first();
-
-        if (! $iuser instanceof IsolatedUser) {
-            return $input;
-        }
-
-        $existingPhpVersion = Site::query()
-            ->where('isolated_user_id', $iuser->id)
-            ->whereNotNull('php_version')
-            ->value('php_version');
-        $submittedPhpVersion = $input['php_version'] ?? null;
-
-        if (is_string($existingPhpVersion) && $existingPhpVersion !== '') {
-            if (is_string($submittedPhpVersion) && $submittedPhpVersion !== '' && $submittedPhpVersion !== $existingPhpVersion) {
-                throw ValidationException::withMessages([
-                    'php_version' => "Isolated user '{$user}' already uses PHP {$existingPhpVersion}; shared users require one CLI version.",
-                ]);
-            }
-
-            if (array_key_exists('php_version', $input)) {
-                $input['php_version'] = $existingPhpVersion;
-            }
-        }
-
-        foreach (ToolingRegistry::all() as $id => $tool) {
-            $allowed = $tool::supportedVersionsWithNone();
-            $existing = $iuser->toolingVersion($id);
-
-            if ($existing === null || ! in_array($existing, $allowed, true) || $existing === 'none') {
-                continue;
-            }
-
-            $field = $tool::typeDataKey();
-            $submitted = $input[$field] ?? null;
-
-            if (is_string($submitted) && $submitted !== '' && $submitted !== $existing) {
-                throw ValidationException::withMessages([
-                    $field => "Isolated user '{$user}' already has {$tool::label()} {$existing} installed; this cannot be changed.",
-                ]);
-            }
-
-            $input[$field] = $existing;
-        }
-
-        return $input;
     }
 
     /**

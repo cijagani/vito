@@ -1,6 +1,6 @@
 display_errors=Off
 log_errors=On
-open_basedir="/home/{{ $siteUser }}/"
+open_basedir="{{ $homeDirectory }}/"
 upload_tmp_dir="{{ $temporaryPath }}"
 session.save_path="{{ $temporaryPath }}"
 @if ($memoryLimitMb !== null)

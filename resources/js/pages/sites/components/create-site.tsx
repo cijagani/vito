@@ -21,7 +21,6 @@ import { DynamicFieldConfig } from '@/types/dynamic-field-config';
 import DynamicField from '@/components/ui/dynamic-field';
 import DatabaseSelect from '@/pages/databases/components/database-select';
 import DatabaseUserSelect from '@/pages/database-users/components/database-user-select';
-import IsolatedUserSelect from '@/pages/sites/components/isolated-user-select';
 import SelectRepo from '@/pages/source-controls/components/select-repo';
 import SelectBranch from '@/pages/source-controls/components/select-branch';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -36,7 +35,6 @@ type CreateSiteForm = {
   repository: string;
   branch: string;
   user: string;
-  shared_user: boolean;
   // Tooling versions land here as `{tool_id}_version` (e.g. `node_version`,
   // `bun_version`), driven by the site type's `createTimeTools()` and the
   // `tooling` DynamicField.
@@ -104,7 +102,6 @@ export default function CreateSite({
     repository: '',
     branch: '',
     user: '',
-    shared_user: false,
   });
 
   const serverId = form.data.server ? parseInt(form.data.server, 10) : 0;
@@ -135,7 +132,7 @@ export default function CreateSite({
 
     const suggestion = suggestIsolatedUsername(form.data.domain, blocked);
     if (suggestion !== form.data.user) {
-      form.setData((data) => ({ ...data, user: suggestion, shared_user: false }));
+      form.setData((data) => ({ ...data, user: suggestion }));
     }
   }, [form.data.server, form.data.domain, userManuallyEdited, isolatedUsersQuery.data, isolatedUsersQuery.isLoading, configs]);
 
@@ -168,12 +165,7 @@ export default function CreateSite({
     }
   }, [form.data.type, form.data.use_source_control, form.setData, configs]);
 
-  const selectedIsolatedUser = useMemo<IsolatedUserOption | null>(
-    () => (isolatedUsersQuery.data ?? []).find((u) => u.user === form.data.user) ?? null,
-    [isolatedUsersQuery.data, form.data.user],
-  );
-
-  const lockedVersions = selectedIsolatedUser?.runtime_versions ?? {};
+  const lockedVersions = useMemo<Record<string, string | null>>(() => ({}), []);
 
   // Tool ids participating in the current site type's form, with their kind:
   //   - 'tooling'          → optional multi-tool field; unlock fallback = 'none'
@@ -647,30 +639,20 @@ export default function CreateSite({
                       </DialogContent>
                     </Dialog>
                   </Label>
-                  <IsolatedUserSelect
-                    serverId={parseInt(form.data.server, 10)}
+                  <Input
+                    id="user"
                     value={form.data.user}
-                    onValueChange={(value) => {
+                    onChange={(event) => {
                       setUserManuallyEdited(true);
-                      const isExisting = (isolatedUsersQuery.data ?? []).some((option) => option.user === value);
-                      form.setData((data) => ({ ...data, user: value, shared_user: isExisting }));
+                      form.setData('user', event.target.value);
                     }}
-                    onSearchChange={() => setUserManuallyEdited(true)}
+                    placeholder="Derived from domain"
                   />
                   <p className="text-muted-foreground text-xs">
-                    New users provide the strongest site boundary. Reusing a user creates an explicit shared trust group.
+                    Each site gets its own Linux user, home directory, PHP-FPM service, and filesystem quota.
                   </p>
-                  {selectedIsolatedUser && (
-                    <Alert>
-                      <AlertDescription>
-                        This site will share Linux file and process access with {selectedIsolatedUser.sites_count}{' '}
-                        {selectedIsolatedUser.sites_count === 1 ? 'existing site' : 'existing sites'} using{' '}
-                        <span className="font-medium">{selectedIsolatedUser.user}</span>. Only continue when those sites trust each other.
-                      </AlertDescription>
-                    </Alert>
-                    )}
-                    <InputError message={form.errors.user} />
-                    <InputError message={form.errors.shared_user} />
+                  <InputError message={form.errors.user} />
+                  <InputError message={form.errors.shared_user} />
                   </FormField>
 
                 {configs.site.types[form.data.type].form?.map((config) => getFormField(config))}

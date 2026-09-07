@@ -9,6 +9,7 @@ use App\Exceptions\SSHCommandError;
 use App\Exceptions\SSHError;
 use App\Models\Site;
 use App\Models\SiteRuntimeProfile;
+use App\Support\SiteStorage;
 use App\Services\AbstractService;
 use App\Services\HasLogs;
 use Closure;
@@ -151,6 +152,7 @@ class PHP extends AbstractService implements HasLogs
             view('ssh.services.php.fpm-pool', [
                 'user' => $user,
                 'version' => $version,
+                'homeDirectory' => SiteStorage::homeDirectory($user),
             ]),
             'root'
         );
@@ -190,7 +192,7 @@ class PHP extends AbstractService implements HasLogs
                 'socketPath' => $artifacts->fpmSocketPath($version),
                 'stateDirectory' => $artifacts->fpmStateDirectory($version),
                 'cliRuntimeDirectory' => $artifacts->phpCliIniDirectory(),
-                'sitePhpLink' => '/home/'.$site->user.'/bin/php',
+                'sitePhpLink' => $site->homeDirectory().'/bin/php',
                 'removeCliRuntime' => $removingCurrentRuntime,
                 'removeSitePhpLink' => $removingCurrentRuntime && ! $site->userSharedWithSiblings(),
                 'fpmBinary' => '/usr/sbin/php-fpm'.$version,

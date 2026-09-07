@@ -1,4 +1,5 @@
 VITO_SITE_USER={!! escapeshellarg($siteUser) !!}
+VITO_HOME={!! escapeshellarg($homeDirectory) !!}
 VITO_RUNTIME_PATH={!! escapeshellarg($runtimeDirectory) !!}
 
 if ! id -u "$VITO_SITE_USER" >/dev/null 2>&1; then
@@ -7,6 +8,6 @@ fi
 
 sudo install -d -o root -g root -m 0755 /var/lib/vito /var/lib/vito/php-cli
 sudo install -d -o root -g "$VITO_SITE_USER" -m 0750 "$VITO_RUNTIME_PATH"
-sudo install -d -o "$VITO_SITE_USER" -g "$VITO_SITE_USER" -m 0750 "/home/$VITO_SITE_USER/bin"
+sudo install -d -o "$VITO_SITE_USER" -g "$VITO_SITE_USER" -m 0750 "$VITO_HOME/bin"
 
-unset VITO_SITE_USER VITO_RUNTIME_PATH
+unset VITO_SITE_USER VITO_HOME VITO_RUNTIME_PATH

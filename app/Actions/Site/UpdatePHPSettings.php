@@ -61,6 +61,7 @@ class UpdatePHPSettings
                     'memory_high_mb',
                     'memory_max_mb',
                     'tasks_max',
+                    'disk_quota_mb',
                 ]));
                 $this->saveWithRevision($runtime);
             }
@@ -86,6 +87,7 @@ class UpdatePHPSettings
             $site->webserver()->updateVHost($site);
             if ($site->isIsolated()) {
                 app(RefreshSiteRuntimeConsumers::class)->refresh($site);
+                app(ApplySiteFilesystemQuota::class)->apply($site);
             }
         } catch (Throwable $exception) {
             DB::transaction(function () use ($site, $previousTypeData, $runtime, $web, $previousRuntime, $previousWeb): void {
@@ -102,6 +104,7 @@ class UpdatePHPSettings
                 try {
                     $site->webserver()->updateVHost($site);
                     app(RefreshSiteRuntimeConsumers::class)->refresh($site);
+                    app(ApplySiteFilesystemQuota::class)->apply($site);
                 } catch (Throwable $rollbackException) {
                     Log::error('PHP settings rollback requires manual repair', [
                         'site_id' => $site->id,
@@ -141,6 +144,7 @@ class UpdatePHPSettings
             'memory_high_mb' => ['nullable', 'integer', 'min:1', 'max:1048576'],
             'memory_max_mb' => ['nullable', 'integer', 'min:1', 'max:1048576'],
             'tasks_max' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'disk_quota_mb' => ['nullable', 'integer', 'min:1', 'max:1048576'],
             'client_max_body_size_mb' => ['nullable', 'integer', 'min:1', 'max:10240'],
             'fastcgi_read_timeout_seconds' => ['nullable', 'integer', 'min:1', 'max:3600'],
             'proxy_connect_timeout_seconds' => ['nullable', 'integer', 'min:1', 'max:600'],
@@ -201,6 +205,10 @@ class UpdatePHPSettings
                 }
             }
 
+            if ($site->userSharedWithSiblings() && array_key_exists('disk_quota_mb', $input) && $input['disk_quota_mb'] !== null && $input['disk_quota_mb'] !== '') {
+                $validator->errors()->add('disk_quota_mb', 'Filesystem quotas require one Linux user per site.');
+            }
+
             if ($site->webserver()->id() !== 'nginx' && ! empty($input['rate_limit_profile'])) {
                 $validator->errors()->add('rate_limit_profile', 'Rate-limit profiles are currently supported only by Nginx.');
             }
@@ -248,6 +256,9 @@ class UpdatePHPSettings
             'tasks_max' => array_key_exists('tasks_max', $validated)
                 ? $this->intOrNull($validated['tasks_max'])
                 : $runtime->tasks_max,
+            'disk_quota_mb' => array_key_exists('disk_quota_mb', $validated)
+                ? $this->intOrNull($validated['disk_quota_mb'])
+                : $runtime->disk_quota_mb,
             'client_max_body_size_mb' => array_key_exists('client_max_body_size_mb', $validated)
                 ? $this->intOrNull($validated['client_max_body_size_mb'])
                 : $this->intOrNull($validated['max_upload_size'] ?? $web->client_max_body_size_mb),

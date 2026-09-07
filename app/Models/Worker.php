@@ -13,7 +13,7 @@ use Throwable;
 
 /**
  * @property int $server_id
- * @property int $site_id
+ * @property ?int $site_id
  * @property string $command
  * @property string $user
  * @property bool $auto_start
@@ -108,6 +108,10 @@ class Worker extends AbstractModel
     {
         if ($this->user === 'root') {
             return '/root/.logs/workers';
+        }
+
+        if ($this->site_id !== null && $this->site !== null) {
+            return $this->site->homeDirectory().'/.logs/workers';
         }
 
         return '/home/'.$this->user.'/.logs/workers';

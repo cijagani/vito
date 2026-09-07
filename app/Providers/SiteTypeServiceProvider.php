@@ -67,7 +67,7 @@ class SiteTypeServiceProvider extends ServiceProvider
                     ->text()
                     ->label('Web Directory')
                     ->placeholder('e.g., public, www, dist (leave empty for root)')
-                    ->description('The relative path of your website from /home/vito/your-domain/'),
+                    ->description('The relative path of your website from /srv/vito/sites/your-user/your-domain/'),
                 DynamicField::make('composer')
                     ->checkbox()
                     ->label('Run `composer install --no-dev`')
@@ -98,7 +98,7 @@ class SiteTypeServiceProvider extends ServiceProvider
                     ->text()
                     ->label('Web Directory')
                     ->placeholder('e.g., public, www, dist (leave empty for root)')
-                    ->description('The relative path of your website from /home/vito/your-domain/'),
+                    ->description('The relative path of your website from /srv/vito/sites/your-user/your-domain/'),
                 DynamicField::make('package_manager')
                     ->toolingSelector(
                         [NodeTooling::class, PnpmTooling::class, YarnTooling::class],
@@ -129,7 +129,7 @@ class SiteTypeServiceProvider extends ServiceProvider
                     ->label('Web Directory')
                     ->default('public')
                     ->placeholder('e.g., public, www, dist (leave empty for root)')
-                    ->description('The relative path of your website from /home/vito/your-domain/'),
+                    ->description('The relative path of your website from /srv/vito/sites/your-user/your-domain/'),
                 DynamicField::make('repository')
                     ->text()
                     ->label('Repository')
