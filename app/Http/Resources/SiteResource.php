@@ -2,7 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\SiteIsolationProfile;
 use App\Models\Site;
+use App\Models\SiteRuntimeProfile;
 use App\SiteTypes\AbstractProxiedSiteType;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -36,6 +38,7 @@ class SiteResource extends JsonResource
             'path' => $this->path,
             'php_version' => $this->php_version,
             'php_settings' => $this->phpSettings(),
+            'runtime_tuning' => $this->runtimeTuning(),
             'supports_php_settings' => $this->supportsPhpSettings(),
             'repository' => $this->repository,
             'branch' => $this->branch,
@@ -90,5 +93,69 @@ class SiteResource extends JsonResource
         }
 
         return $typeData;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function runtimeTuning(): ?array
+    {
+        if (! $this->isIsolated() || ! $this->php_version || $this->type()->language() !== 'php') {
+            return null;
+        }
+
+        if (! $this->relationLoaded('runtimeProfile') || ! $this->relationLoaded('webProfile')) {
+            return null;
+        }
+
+        $runtime = $this->runtimeProfile;
+        $web = $this->webProfile;
+        if ($runtime === null || $web === null) {
+            return null;
+        }
+
+        $memoryPerWorkerMb = $runtime->memory_limit_mb ?? 128;
+        $estimatedMemoryMb = $runtime->fpm_max_children * $memoryPerWorkerMb;
+        $aggregateMemoryMb = SiteRuntimeProfile::query()
+            ->whereHas('site', fn ($query) => $query
+                ->where('server_id', $this->server_id)
+                ->whereNotNull('php_version'))
+            ->where('isolation_profile', '!=', SiteIsolationProfile::LEGACY_UNISOLATED->value)
+            ->get(['fpm_max_children', 'memory_limit_mb'])
+            ->sum(fn (SiteRuntimeProfile $profile): int => $profile->fpm_max_children * ($profile->memory_limit_mb ?? 128));
+        $memoryTotalKb = $this->server->latestMetric?->memory_total;
+        $serverMemoryMb = is_numeric($memoryTotalKb) ? (int) floor((float) $memoryTotalKb / 1024) : null;
+
+        return [
+            'isolation_profile' => $runtime->isolation_profile->value,
+            'fpm_service_mode' => $runtime->fpm_service_mode->value,
+            'fpm_process_manager' => $runtime->fpm_process_manager->value,
+            'fpm_max_children' => $runtime->fpm_max_children,
+            'fpm_start_servers' => $runtime->fpm_start_servers,
+            'fpm_min_spare_servers' => $runtime->fpm_min_spare_servers,
+            'fpm_max_spare_servers' => $runtime->fpm_max_spare_servers,
+            'fpm_idle_timeout_seconds' => $runtime->fpm_idle_timeout_seconds,
+            'fpm_max_requests' => $runtime->fpm_max_requests,
+            'request_timeout_seconds' => $runtime->request_timeout_seconds,
+            'slow_request_seconds' => $runtime->slow_request_seconds,
+            'client_max_body_size_mb' => $web->client_max_body_size_mb,
+            'fastcgi_read_timeout_seconds' => $web->fastcgi_read_timeout_seconds,
+            'proxy_connect_timeout_seconds' => $web->proxy_connect_timeout_seconds,
+            'proxy_read_timeout_seconds' => $web->proxy_read_timeout_seconds,
+            'static_cache_policy' => $web->static_cache_policy,
+            'rate_limit_profile' => $web->rate_limit_profile,
+            'access_log_enabled' => $web->access_log_enabled,
+            'effective_socket' => $this->runtimeArtifacts()->fpmSocketPath($this->php_version),
+            'estimated_fpm_memory_mb' => $estimatedMemoryMb,
+            'aggregate_fpm_memory_mb' => $aggregateMemoryMb,
+            'server_memory_mb' => $serverMemoryMb,
+            'capacity_warning' => $serverMemoryMb !== null && $aggregateMemoryMb > (int) floor($serverMemoryMb * 0.8),
+            'runtime_drifted' => $runtime->needsApply() || $runtime->applied_checksum === null,
+            'web_drifted' => $web->needsApply() || $web->applied_checksum === null,
+            'runtime_applied_revision' => $runtime->applied_revision,
+            'web_applied_revision' => $web->applied_revision,
+            'runtime_last_applied_at' => $runtime->last_applied_at,
+            'web_last_applied_at' => $web->last_applied_at,
+        ];
     }
 }

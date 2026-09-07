@@ -295,11 +295,17 @@ class Site extends AbstractModel
         return $this->belongsTo(IsolatedUser::class);
     }
 
+    /**
+     * @return HasOne<SiteRuntimeProfile, covariant $this>
+     */
     public function runtimeProfile(): HasOne
     {
         return $this->hasOne(SiteRuntimeProfile::class);
     }
 
+    /**
+     * @return HasOne<SiteWebProfile, covariant $this>
+     */
     public function webProfile(): HasOne
     {
         return $this->hasOne(SiteWebProfile::class);

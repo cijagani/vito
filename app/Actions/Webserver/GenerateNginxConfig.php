@@ -85,12 +85,21 @@ class GenerateNginxConfig extends AbstractGenerateConfig
     protected function enrichServerBlock(array $block, array $data): array
     {
         $block['upstream_name'] = $data['upstream_name'];
-        $block['client_max_body_size'] = $data['php_max_upload_size'] !== null
-            ? $data['php_max_upload_size'].'M'
+        $block['client_max_body_size'] = $data['client_max_body_size_mb'] !== null
+            ? $data['client_max_body_size_mb'].'M'
             : false;
-        $block['fastcgi_read_timeout'] = $data['php_max_execution_time'] !== null
-            ? $data['php_max_execution_time'].'s'
+        $block['fastcgi_read_timeout'] = $data['fastcgi_read_timeout_seconds'] !== null
+            ? $data['fastcgi_read_timeout_seconds'].'s'
             : false;
+        $block['proxy_connect_timeout'] = $data['proxy_connect_timeout_seconds'] !== null
+            ? $data['proxy_connect_timeout_seconds'].'s'
+            : false;
+        $block['proxy_read_timeout'] = $data['proxy_read_timeout_seconds'] !== null
+            ? $data['proxy_read_timeout_seconds'].'s'
+            : false;
+        $block['rate_limit_enabled'] = $data['rate_limit_profile'] !== null;
+        $block['rate_limit_zone'] = 'vito_site_'.$data['site_id'];
+        $block['rate_limit_burst'] = $data['rate_limit_profile'] === 'strict' ? 10 : 30;
 
         return $block;
     }
@@ -134,6 +143,9 @@ class GenerateNginxConfig extends AbstractGenerateConfig
         $data['has_octane_map'] = $isOctane;
         $data['has_force_ssl_redirect'] = ! empty($this->forceSSLDomains);
         $data['force_ssl_domains'] = $this->forceSSLDomains;
+        $data['rate_limit_enabled'] = $data['rate_limit_profile'] !== null;
+        $data['rate_limit_zone'] = 'vito_site_'.$site->id;
+        $data['rate_limit_rate'] = $data['rate_limit_profile'] === 'strict' ? '5r/s' : '20r/s';
 
         return $data;
     }

@@ -89,8 +89,8 @@ test('runtime profiles are created and revisioned from legacy site state', funct
 
     expect($runtime->fresh()->desired_revision)->toBe(2)
         ->and($runtime->fresh()->memory_limit_mb)->toBe(256)
-        ->and($web->fresh()->desired_revision)->toBe(2)
-        ->and($web->fresh()->client_max_body_size_mb)->toBe(128);
+        ->and($web->fresh()->desired_revision)->toBe(1)
+        ->and($web->fresh()->client_max_body_size_mb)->toBeNull();
 });
 
 test('site and server runtime locks use stable separate keys', function () {

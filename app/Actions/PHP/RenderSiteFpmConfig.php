@@ -27,11 +27,45 @@ class RenderSiteFpmConfig
         $profile = SiteRuntimeProfile::query()->where('site_id', $site->id)->firstOrFail();
         $this->assertValid($site, $profile);
 
+        $artifacts = $site->runtimeArtifacts();
+        $contents = $this->contents($site, $profile);
+        $checksum = hash('sha256', $contents);
+
+        $revision = DB::transaction(function () use ($profile, $checksum): int {
+            $locked = SiteRuntimeProfile::query()->whereKey($profile->id)->lockForUpdate()->firstOrFail();
+            if ($locked->desired_checksum !== $checksum) {
+                $locked->desired_revision++;
+                $locked->desired_checksum = $checksum;
+                $locked->save();
+            }
+
+            return $locked->desired_revision;
+        });
+
+        return new SiteRuntimeConfig(
+            SiteRuntimeConfigType::PHP_FPM,
+            $artifacts->fpmPoolPath($site->php_version),
+            $contents,
+            $revision,
+        );
+    }
+
+    public function preview(Site $site): string
+    {
+        $profile = SiteRuntimeProfile::query()->where('site_id', $site->id)->firstOrFail();
+        $this->assertValid($site, $profile);
+
+        return $this->contents($site, $profile);
+    }
+
+    private function contents(Site $site, SiteRuntimeProfile $profile): string
+    {
         $webserverUser = $site->webserver()::id() === Nginx::id()
             ? Nginx::WORKER_USER
             : $site->server->getSshUser();
         $artifacts = $site->runtimeArtifacts();
-        $contents = view('ssh.services.php.site-fpm-pool', [
+
+        return view('ssh.services.php.site-fpm-pool', [
             'poolName' => $artifacts->fpmPoolName(),
             'siteUser' => $site->user,
             'socketPath' => $artifacts->fpmSocketPath($site->php_version),
@@ -56,25 +90,6 @@ class RenderSiteFpmConfig
             'errorLogPath' => $artifacts->logDirectory().'/php-error.log',
             'slowLogPath' => $artifacts->logDirectory().'/php-slow.log',
         ])->render();
-        $checksum = hash('sha256', $contents);
-
-        $revision = DB::transaction(function () use ($profile, $checksum): int {
-            $locked = SiteRuntimeProfile::query()->whereKey($profile->id)->lockForUpdate()->firstOrFail();
-            if ($locked->desired_checksum !== $checksum) {
-                $locked->desired_revision++;
-                $locked->desired_checksum = $checksum;
-                $locked->save();
-            }
-
-            return $locked->desired_revision;
-        });
-
-        return new SiteRuntimeConfig(
-            SiteRuntimeConfigType::PHP_FPM,
-            $artifacts->fpmPoolPath($site->php_version),
-            $contents,
-            $revision,
-        );
     }
 
     private function assertValid(Site $site, SiteRuntimeProfile $profile): void
@@ -101,6 +116,8 @@ class RenderSiteFpmConfig
             || $profile->fpm_max_spare_servers === null
             || $profile->fpm_start_servers < 1
             || $profile->fpm_min_spare_servers < 1
+            || $profile->fpm_start_servers < $profile->fpm_min_spare_servers
+            || $profile->fpm_start_servers > $profile->fpm_max_spare_servers
             || $profile->fpm_max_spare_servers < $profile->fpm_min_spare_servers
             || $profile->fpm_start_servers > $profile->fpm_max_children
             || $profile->fpm_max_spare_servers > $profile->fpm_max_children

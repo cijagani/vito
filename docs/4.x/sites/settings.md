@@ -18,29 +18,46 @@ You can change the PHP version of each website in their Settings page.
 Make sure that the PHP version you want to use is already installed in the [PHP](../servers/php#install-and-uninstall)
 page.
 
-## Configure PHP Settings
+## Configure PHP and runtime settings
 
-For PHP sites you can tune common per-site PHP runtime limits without editing any files. Click
-**Configure** next to the PHP version on the Settings page to set:
+For managed PHP sites, click **Configure** next to the PHP version to change the site's PHP limits.
+An isolated site also gets typed PHP-FPM and webserver controls.
 
-- **Max upload size** — the largest file that can be uploaded (MB).
-- **Max execution time** — how long a request may run (seconds).
-- **Memory limit** — the maximum memory a request may use (MB).
-- **Max input vars** — the maximum number of input variables, e.g. form fields.
+PHP limits include upload size, execution time, memory per request, and maximum input variables.
+For an isolated site, Vito writes these values to both the site-specific FPM pool and its CLI INI
+profile. Deployments, one-off commands, Composer, workers, and cron use the site's selected PHP
+version and CLI profile. A legacy site without an isolated system user keeps the previous
+vhost-based behavior.
 
-Leave a field empty to use the server's default. Vito applies these to the site's vhost (via FastCGI
-`PHP_VALUE`, together with `client_max_body_size`/`fastcgi_read_timeout` on nginx and `request_body`
-on Caddy), so they take effect for requests served through nginx/Caddy and are preserved across
-deployments. They do not affect the PHP CLI.
+The FPM controls support two process managers:
 
-Where a value is left unset, the server default applies. PHP defaults to 2 MB uploads, a 30s
-execution time, a 128 MB memory limit, and 1000 input vars; on nginx, requests are additionally
-capped at 1 MB (body size) and 60s until you raise them here.
+- **Dynamic** keeps a validated number of starting, minimum spare, and maximum spare workers.
+- **On demand** starts workers when requests arrive and removes idle workers after the configured
+  timeout.
 
-:::tip
-These settings are per-site. PHP-FPM process pools are shared per system user, so process-manager
-tuning (such as `pm.max_children`) is not configured here.
-:::
+Both modes support maximum children, child recycling, a hard request timeout, and an optional slow
+request log threshold. The slow threshold must remain below the hard request timeout. Dynamic
+values must satisfy `minimum spare <= start <= maximum spare <= maximum children`.
+
+Webserver controls include request-body and upstream timeouts, per-site access logging, and a static
+asset cache policy. Nginx sites can additionally select a validated standard or strict request-rate
+profile. Rate limiting is not currently offered for Caddy sites.
+
+Leaving an optional PHP or webserver limit empty uses the installed service's default. Vito does not
+publish universal optimization presets because safe values depend on measured application traffic,
+latency, and memory use.
+
+### Capacity and configuration state
+
+The **Isolation & runtime** card displays the effective FPM socket, the configured process manager,
+and a theoretical maximum pool-memory estimate (`maximum children x memory per request`). It also
+compares the aggregate estimate for PHP sites with the server's latest memory metric and warns when
+the estimate exceeds 80 percent. This is a planning warning, not measured PHP memory consumption.
+
+Use **Preview** to inspect the desired generated FPM and vhost configuration without changing the
+server. If the stored desired revision differs from the last successfully applied revision, the card
+shows drift and enables **Repair drift**. Repair validates and reapplies the managed configuration
+using the same atomic apply, health check, and rollback path as a normal update.
 
 :::warning
 Configuration is available only for PHP sites that use automatic vhost generation and the default

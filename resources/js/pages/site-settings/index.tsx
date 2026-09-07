@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Server } from '@/types/server';
 import Container from '@/components/container';
 import HeaderContainer from '@/components/header-container';
@@ -218,6 +218,41 @@ export default function Databases() {
             </div>
           </CardContent>
         </Card>
+
+        {page.props.site.runtime_tuning && (
+          <Card className="overflow-hidden">
+            <CardHeader className="flex-row items-center justify-between gap-3">
+              <div className="space-y-2">
+                <CardTitle>Isolation & runtime</CardTitle>
+                <CardDescription>Effective site boundary, capacity estimate, and applied configuration state.</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => dialog.runtimePreview.open({ site: page.props.site })}>Preview</Button>
+                <Button
+                  variant="outline"
+                  disabled={!page.props.site.runtime_tuning.runtime_drifted && !page.props.site.runtime_tuning.web_drifted}
+                  onClick={() => router.post(route('site-settings.runtime-repair', { server: page.props.site.server_id, site: page.props.site.id }))}
+                >
+                  Repair drift
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="bg-background">
+              <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div><p className="text-muted-foreground text-xs">Isolation profile</p><p className="font-medium capitalize">{page.props.site.runtime_tuning.isolation_profile.replace('_', ' ')}</p></div>
+                <div><p className="text-muted-foreground text-xs">FPM manager</p><p className="font-medium capitalize">{page.props.site.runtime_tuning.fpm_process_manager}</p></div>
+                <div><p className="text-muted-foreground text-xs">Effective socket</p><p className="truncate font-mono text-xs">{page.props.site.runtime_tuning.effective_socket}</p></div>
+                <div><p className="text-muted-foreground text-xs">Theoretical pool memory</p><p className="font-medium">{page.props.site.runtime_tuning.estimated_fpm_memory_mb} MB</p></div>
+              </div>
+              <Separator />
+              <div className="flex flex-wrap gap-2 p-4 text-sm">
+                <Badge variant={page.props.site.runtime_tuning.runtime_drifted ? 'warning' : 'success'}>FPM {page.props.site.runtime_tuning.runtime_drifted ? 'drifted' : 'applied'}</Badge>
+                <Badge variant={page.props.site.runtime_tuning.web_drifted ? 'warning' : 'success'}>Web {page.props.site.runtime_tuning.web_drifted ? 'drifted' : 'applied'}</Badge>
+                {page.props.site.runtime_tuning.capacity_warning && <Badge variant="warning">Capacity warning</Badge>}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-destructive/50 overflow-hidden">
           <CardHeader>

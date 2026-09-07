@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\PHP\RenderSiteFpmConfig;
 use App\Actions\Site\DeleteSite;
 use App\Actions\Site\PreviewVhost;
+use App\Actions\Site\RepairSiteRuntime;
 use App\Actions\Site\UpdateBasicAuth;
 use App\Actions\Site\UpdateBranch;
 use App\Actions\Site\UpdatePHPSettings;
@@ -102,6 +104,30 @@ class SiteSettingController extends Controller
         app(UpdatePHPSettings::class)->update($site, $request->input());
 
         return back()->with('success', 'PHP settings updated successfully.');
+    }
+
+    #[Get('/runtime-preview', name: 'site-settings.runtime-preview')]
+    public function runtimePreview(Server $server, Site $site): JsonResponse
+    {
+        $this->authorize('view', [$site, $server]);
+        abort_unless($site->supportsPhpSettings() && $site->isIsolated(), 404);
+
+        return response()->json([
+            'fpm' => app(RenderSiteFpmConfig::class)->preview($site),
+            'vhost' => $site->webserver()->generateVhost($site),
+        ]);
+    }
+
+    /**
+     * @throws SSHError
+     */
+    #[Post('/runtime-repair', name: 'site-settings.runtime-repair')]
+    public function runtimeRepair(Server $server, Site $site): RedirectResponse
+    {
+        $this->authorize('update', [$site, $server]);
+        app(RepairSiteRuntime::class)->repair($site);
+
+        return back()->with('success', 'Site runtime was validated and repaired.');
     }
 
     /**

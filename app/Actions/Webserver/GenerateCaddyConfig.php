@@ -80,8 +80,16 @@ class GenerateCaddyConfig extends AbstractGenerateConfig
     {
         $block['lb_servers'] = $data['lb_servers'];
         $block['lb_policy'] = $data['lb_policy'];
-        $block['request_body_max_size'] = $data['php_max_upload_size'] !== null
-            ? $data['php_max_upload_size'].'MB'
+        $block['request_body_max_size'] = $data['client_max_body_size_mb'] !== null
+            ? $data['client_max_body_size_mb'].'MB'
+            : false;
+        $block['has_proxy_timeouts'] = $data['proxy_connect_timeout_seconds'] !== null
+            || $data['proxy_read_timeout_seconds'] !== null;
+        $block['proxy_connect_timeout'] = $data['proxy_connect_timeout_seconds'] !== null
+            ? $data['proxy_connect_timeout_seconds'].'s'
+            : false;
+        $block['proxy_read_timeout'] = $data['proxy_read_timeout_seconds'] !== null
+            ? $data['proxy_read_timeout_seconds'].'s'
             : false;
 
         return $block;

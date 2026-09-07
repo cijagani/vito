@@ -200,7 +200,15 @@ abstract class AbstractGenerateConfig
     protected function buildCommonData(Site $site, string $primaryDomain): array
     {
         $siteTypeData = $site->type()->vhostData();
-        $webProfile = $site->webProfile()->first();
+        $webProfile = SiteWebProfile::query()->firstOrNew(
+            ['site_id' => $site->id],
+            [
+                'client_max_body_size_mb' => $this->phpSetting($site, 'max_upload_size'),
+                'fastcgi_read_timeout_seconds' => $this->phpSetting($site, 'max_execution_time'),
+                'static_cache_policy' => 'default',
+                'access_log_enabled' => true,
+            ],
+        );
         $isOctane = (bool) data_get($site->type_data, 'octane', false);
         $isPhp = ($siteTypeData['is_php'] ?? false) && ! $isOctane;
 
@@ -226,6 +234,8 @@ abstract class AbstractGenerateConfig
             'php_value_string' => $phpValueString,
             'php_max_upload_size' => $phpEnabled ? $this->phpSetting($site, 'max_upload_size') : null,
             'php_max_execution_time' => $phpEnabled ? $this->phpSetting($site, 'max_execution_time') : null,
+            'client_max_body_size_mb' => $webProfile->client_max_body_size_mb,
+            'fastcgi_read_timeout_seconds' => $webProfile->fastcgi_read_timeout_seconds,
             'port' => $site->port,
             'redirects' => $this->buildRedirects($site),
             'type_data' => $site->type_data ?? [],
@@ -234,11 +244,18 @@ abstract class AbstractGenerateConfig
             'basic_auth_file' => $site->htpasswdPath(),
             'basic_auth_users' => $basicAuthEnabled ? array_values($basicAuth['users']) : [],
             'verification_key' => $site->verification_key,
-            'access_log_enabled' => $webProfile instanceof SiteWebProfile
-                ? $webProfile->access_log_enabled
-                : true,
+            'access_log_enabled' => $webProfile->access_log_enabled,
             'access_log_path' => $site->runtimeArtifacts()->logDirectory().'/access.log',
             'error_log_path' => $site->runtimeArtifacts()->logDirectory().'/error.log',
+            'proxy_connect_timeout_seconds' => $webProfile->proxy_connect_timeout_seconds,
+            'proxy_read_timeout_seconds' => $webProfile->proxy_read_timeout_seconds,
+            'static_cache_policy' => $webProfile->static_cache_policy,
+            'static_cache_enabled' => $webProfile->static_cache_policy !== 'disabled',
+            'static_cache_expires' => $webProfile->static_cache_policy === 'aggressive' ? '30d' : '7d',
+            'static_cache_control' => $webProfile->static_cache_policy === 'aggressive'
+                ? 'public, max-age=2592000, immutable'
+                : 'public, max-age=604800',
+            'rate_limit_profile' => $webProfile->rate_limit_profile,
         ];
     }
 
@@ -271,6 +288,12 @@ abstract class AbstractGenerateConfig
             $block['access_log_enabled'] = $data['access_log_enabled'];
             $block['access_log_path'] = $data['access_log_path'];
             $block['error_log_path'] = $data['error_log_path'];
+            $block['proxy_connect_timeout_seconds'] = $data['proxy_connect_timeout_seconds'];
+            $block['proxy_read_timeout_seconds'] = $data['proxy_read_timeout_seconds'];
+            $block['static_cache_enabled'] = $data['static_cache_enabled'];
+            $block['static_cache_expires'] = $data['static_cache_expires'];
+            $block['static_cache_control'] = $data['static_cache_control'];
+            $block['rate_limit_profile'] = $data['rate_limit_profile'];
             $block = $this->enrichServerBlock($block, $data);
         }
 

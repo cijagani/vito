@@ -52,15 +52,13 @@ class SyncSiteRuntimeProfiles
             $web = SiteWebProfile::query()->firstOrNew(['site_id' => $lockedSite->id]);
             if (! $web->exists) {
                 $web->fill([
+                    'client_max_body_size_mb' => $php['max_upload_size'] ?? null,
+                    'fastcgi_read_timeout_seconds' => $php['max_execution_time'] ?? null,
                     'static_cache_policy' => 'default',
                     'symlink_policy' => $lockedSite->isIsolated() ? 'if_not_owner' : 'legacy',
                     'access_log_enabled' => true,
                 ]);
             }
-            $web->fill([
-                'client_max_body_size_mb' => $php['max_upload_size'] ?? null,
-                'fastcgi_read_timeout_seconds' => $php['max_execution_time'] ?? null,
-            ]);
             $this->saveWithRevision($web);
 
             if ($isolationProfile === SiteIsolationProfile::SHARED) {

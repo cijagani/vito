@@ -1,6 +1,8 @@
 {{#server_blocks}}
 {{#domains}}{{address}} {{/domains}}{
+    {{#access_log_enabled}}
     import access_log {{primary_domain}}
+    {{/access_log_enabled}}
     import compression
     import security_headers
 
@@ -26,6 +28,10 @@
 
     {{#is_php}}
     root * {{root}}
+    {{#static_cache_enabled}}
+    @staticAssets path *.css *.js *.mjs *.jpg *.jpeg *.png *.gif *.svg *.webp *.avif *.ico *.woff *.woff2 *.ttf *.eot
+    header @staticAssets Cache-Control "{{static_cache_control}}"
+    {{/static_cache_enabled}}
     {{#request_body_max_size}}request_body {
         max_size {{request_body_max_size}}
     }
@@ -47,7 +53,12 @@
     {{/is_octane}}
 
     {{#is_reverse_proxy}}
-    reverse_proxy localhost:{{port}}
+    reverse_proxy localhost:{{port}}{{#has_proxy_timeouts}} {
+        transport http {
+            {{#proxy_connect_timeout}}dial_timeout {{proxy_connect_timeout}}{{/proxy_connect_timeout}}
+            {{#proxy_read_timeout}}response_header_timeout {{proxy_read_timeout}}{{/proxy_read_timeout}}
+        }
+    }{{/has_proxy_timeouts}}
     {{/is_reverse_proxy}}
 
     {{#is_load_balancer}}
