@@ -31,6 +31,10 @@ export default function CronJobForm({
   const configs = useConfigs()!;
 
   const sshUsers = useMemo(() => {
+    if (site?.isolated_user_id) {
+      return [site.user];
+    }
+
     const base = site ? (page.props.ssh_users ?? []) : page.props.server.ssh_users;
     if (cronJob?.user && !base.includes(cronJob.user)) {
       return [...base, cronJob.user];

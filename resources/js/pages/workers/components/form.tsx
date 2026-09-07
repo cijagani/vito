@@ -28,6 +28,7 @@ export default function WorkerForm({
   worker?: Worker;
 }) {
   const page = usePage<SharedData & { server: Server; sites?: Array<{ id: number; domain: string }> }>();
+  const availableUsers = site?.isolated_user_id ? [site.user] : page.props.server.ssh_users;
   const form = useForm<{
     name: string;
     command: string;
@@ -39,7 +40,7 @@ export default function WorkerForm({
   }>({
     name: worker?.name || '',
     command: worker?.command || '',
-    user: worker?.user || '',
+    user: worker?.user || (site?.isolated_user_id ? site.user : ''),
     auto_start: worker?.auto_start || true,
     auto_restart: worker?.auto_restart || true,
     numprocs: worker?.numprocs.toString() || '',
@@ -118,7 +119,7 @@ export default function WorkerForm({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {page.props.server.ssh_users.map((user) => (
+                    {availableUsers.map((user) => (
                       <SelectItem key={`user-${user}`} value={user}>
                         {user}
                       </SelectItem>

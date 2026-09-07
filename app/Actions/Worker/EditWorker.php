@@ -26,6 +26,7 @@ class EditWorker
         }
 
         $site = $this->resolveSite($worker, $input);
+        $this->assertIsolatedSiteOwnership($worker, $site);
         $this->validate($worker, $input, $site);
 
         $siteId = $worker->site_id;
@@ -103,6 +104,17 @@ class EditWorker
         }
 
         Validator::make($input, $rules)->validate();
+    }
+
+    private function assertIsolatedSiteOwnership(Worker $worker, ?Site $site): void
+    {
+        $currentSite = $worker->site;
+
+        if ($currentSite?->isIsolated() && $site?->is($currentSite) !== true) {
+            throw ValidationException::withMessages([
+                'site_id' => 'A worker belonging to an isolated site cannot be moved or detached.',
+            ]);
+        }
     }
 
     /**

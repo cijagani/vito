@@ -10,6 +10,7 @@ use App\Models\Site;
 use App\ValidationRules\CronRule;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class EditCronJob
 {
@@ -21,6 +22,7 @@ class EditCronJob
     public function edit(Server $server, CronJob $cronJob, array $input, ?Site $site = null): CronJob
     {
         $site = $this->resolveSite($server, $input, $site);
+        $this->assertIsolatedSiteOwnership($cronJob, $site);
         $this->validate($input, $server, $site);
 
         // Sync before editing to preserve any manual cronjobs
@@ -103,6 +105,17 @@ class EditCronJob
         }
 
         Validator::make($input, $rules)->validate();
+    }
+
+    private function assertIsolatedSiteOwnership(CronJob $cronJob, ?Site $site): void
+    {
+        $currentSite = $cronJob->site;
+
+        if ($currentSite?->isIsolated() && $site?->is($currentSite) !== true) {
+            throw ValidationException::withMessages([
+                'site_id' => 'A cron job belonging to an isolated site cannot be moved or detached.',
+            ]);
+        }
     }
 
     /**
