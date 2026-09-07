@@ -115,6 +115,48 @@ test('create worker as isolated user', function () {
     ]);
 });
 
+test('isolated site worker cannot run as the server control user', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    $this->site->user = 'example';
+    $this->site->save();
+
+    $this->post(route('workers.store', [
+        'server' => $this->server,
+        'site' => $this->site,
+    ]), [
+        'name' => 'Wrong Identity',
+        'command' => 'php artisan queue:work',
+        'user' => 'vito',
+        'auto_start' => 1,
+        'auto_restart' => 1,
+        'numprocs' => 1,
+    ])->assertSessionHasErrors('user');
+});
+
+test('server worker form enforces an isolated sites user', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    $site = Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'generic-worker',
+        'domain' => 'generic-worker.test',
+        'path' => '/home/generic-worker/generic-worker.test',
+    ]);
+
+    $this->post(route('workers.store', ['server' => $this->server]), [
+        'name' => 'Wrong Generic Identity',
+        'command' => 'php artisan queue:work',
+        'user' => 'vito',
+        'auto_start' => 1,
+        'auto_restart' => 1,
+        'numprocs' => 1,
+        'site_id' => $site->id,
+    ])->assertSessionHasErrors('user');
+});
+
 test('cannot create worker as invalid user', function () {
     SSH::fake();
 

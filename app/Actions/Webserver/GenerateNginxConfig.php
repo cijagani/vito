@@ -29,7 +29,7 @@ class GenerateNginxConfig extends AbstractGenerateConfig
     protected function buildPhpSocket(Site $site): string
     {
         if ($site->isIsolated()) {
-            return "unix:/run/php/php{$site->php_version}-fpm-{$site->user}.sock";
+            return 'unix:'.$site->runtimeArtifacts()->fpmSocketPath((string) $site->php_version);
         }
 
         return "unix:/var/run/php/php{$site->php_version}-fpm.sock";

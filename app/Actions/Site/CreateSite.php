@@ -251,6 +251,24 @@ class CreateSite
             return $input;
         }
 
+        $existingPhpVersion = Site::query()
+            ->where('isolated_user_id', $iuser->id)
+            ->whereNotNull('php_version')
+            ->value('php_version');
+        $submittedPhpVersion = $input['php_version'] ?? null;
+
+        if (is_string($existingPhpVersion) && $existingPhpVersion !== '') {
+            if (is_string($submittedPhpVersion) && $submittedPhpVersion !== '' && $submittedPhpVersion !== $existingPhpVersion) {
+                throw ValidationException::withMessages([
+                    'php_version' => "Isolated user '{$user}' already uses PHP {$existingPhpVersion}; shared users require one CLI version.",
+                ]);
+            }
+
+            if (array_key_exists('php_version', $input)) {
+                $input['php_version'] = $existingPhpVersion;
+            }
+        }
+
         foreach (ToolingRegistry::all() as $id => $tool) {
             $allowed = $tool::supportedVersionsWithNone();
             $existing = $iuser->toolingVersion($id);

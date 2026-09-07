@@ -48,7 +48,9 @@ test('runtime artifacts use immutable site identity', function () {
         ->and($artifacts->nginxEnabledPath())->toBe('/etc/nginx/sites-enabled/vito-site-'.$this->site->id.'.conf')
         ->and($artifacts->fpmPoolName())->toBe('vito-site-'.$this->site->id)
         ->and($artifacts->fpmPoolPath('8.4'))->toBe('/etc/php/8.4/fpm/pool.d/vito-site-'.$this->site->id.'.conf')
-        ->and($artifacts->fpmSocketPath())->toBe('/run/php/vito-site-'.$this->site->id.'.sock')
+        ->and($artifacts->fpmSocketPath('8.4'))->toBe('/run/php/vito-site-'.$this->site->id.'-php8.4.sock')
+        ->and($artifacts->phpCliProfilePath())->toBe('/var/lib/vito/php-cli/vito-site-'.$this->site->id.'/environment.sh')
+        ->and($artifacts->phpCliIniPath())->toBe('/var/lib/vito/php-cli/vito-site-'.$this->site->id.'/99-vito-site.ini')
         ->and($artifacts->logDirectory())->toBe('/var/log/vito/sites/'.$this->site->id)
         ->and($artifacts->systemdSlice())->toBe('site-'.$this->site->id.'.slice');
 });

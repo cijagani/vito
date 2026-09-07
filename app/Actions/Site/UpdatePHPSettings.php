@@ -4,7 +4,9 @@ namespace App\Actions\Site;
 
 use App\Exceptions\SSHError;
 use App\Models\Site;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Throwable;
 
 class UpdatePHPSettings
 {
@@ -18,11 +20,35 @@ class UpdatePHPSettings
         $validated = $this->validate($input);
 
         $typeData = $site->type_data ?? [];
+        $previousTypeData = $typeData;
         $typeData['php'] = $validated;
         $site->update(['type_data' => $typeData]);
         app(SyncSiteRuntimeProfiles::class)->sync($site);
 
-        $site->webserver()->updateVHost($site);
+        try {
+            $site->webserver()->updateVHost($site);
+            if ($site->isIsolated()) {
+                app(RefreshSiteRuntimeConsumers::class)->refresh($site);
+            }
+        } catch (Throwable $exception) {
+            if ($site->isIsolated()) {
+                $site->update(['type_data' => $previousTypeData]);
+                app(SyncSiteRuntimeProfiles::class)->sync($site);
+
+                try {
+                    $site->webserver()->updateVHost($site);
+                    app(RefreshSiteRuntimeConsumers::class)->refresh($site);
+                } catch (Throwable $rollbackException) {
+                    Log::error('PHP settings rollback requires manual repair', [
+                        'site_id' => $site->id,
+                        'server_id' => $site->server_id,
+                        'exception' => $rollbackException->getMessage(),
+                    ]);
+                }
+            }
+
+            throw $exception;
+        }
 
         app(BroadcastSiteUpdate::class)->broadcast($site);
     }

@@ -20,13 +20,10 @@ class CreateCronJob
      */
     public function create(Server $server, array $input, ?Site $site = null): CronJob
     {
+        $site = $this->resolveSite($server, $input, $site);
         $this->validate($input, $server, $site);
 
-        // Determine site_id: use provided site or from input
         $siteId = $site?->id;
-        if (! $site && isset($input['site_id']) && ! empty($input['site_id'])) {
-            $siteId = (int) $input['site_id'];
-        }
 
         $cronJob = new CronJob([
             'name' => $input['name'] ?? null,
@@ -48,13 +45,17 @@ class CreateCronJob
 
     private function validate(array $input, Server $server, ?Site $site = null): void
     {
+        $allowedUsers = $site?->isIsolated()
+            ? [$site->user]
+            : ($site?->getSshUsers() ?? $server->getSshUsers());
+
         $rules = [
             'command' => [
                 'required',
             ],
             'user' => [
                 'required',
-                Rule::in($site?->getSshUsers() ?? $server->getSshUsers()),
+                Rule::in($allowedUsers),
             ],
             'frequency' => [
                 'required',
@@ -84,5 +85,24 @@ class CreateCronJob
         }
 
         Validator::make($input, $rules)->validate();
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    private function resolveSite(Server $server, array $input, ?Site $site): ?Site
+    {
+        if ($site instanceof Site || empty($input['site_id'])) {
+            return $site;
+        }
+
+        $siteId = filter_var($input['site_id'], FILTER_VALIDATE_INT);
+        if ($siteId === false) {
+            return null;
+        }
+
+        return Site::query()
+            ->where('server_id', $server->id)
+            ->find($siteId);
     }
 }

@@ -16,7 +16,7 @@ final class SiteShellEnvironment
             return [];
         }
 
-        $paths = [];
+        $paths = ['/home/'.$site->user.'/bin'];
         foreach (ToolingRegistry::all() as $tool) {
             if ($tool->installedVersion($site) === null) {
                 continue;
@@ -28,13 +28,28 @@ final class SiteShellEnvironment
             }
         }
 
-        if ($paths === []) {
-            return [];
-        }
-
         $base = "/usr/local/bin:/usr/bin:/bin:/home/{$site->user}/.local/bin";
 
-        return ['PATH' => implode(':', $paths).':'.$base];
+        $environment = [
+            'VITO_SITE_ID' => (string) $site->id,
+            'PATH' => implode(':', $paths).':'.$base,
+        ];
+
+        if ($site->php_version) {
+            $artifacts = $site->runtimeArtifacts();
+            $environment['PHP_VERSION'] = $site->php_version;
+            $environment['PHP_BINARY'] = self::phpBinary($site);
+            $environment['PHP_PATH'] = self::phpBinary($site);
+            $environment['PHP_INI_SCAN_DIR'] = '/etc/php/'.$site->php_version.'/cli/conf.d:'.$artifacts->phpCliIniDirectory();
+            $environment['TMPDIR'] = '/home/'.$site->user.'/tmp/'.$artifacts->key();
+        }
+
+        return $environment;
+    }
+
+    public static function phpBinary(Site $site): string
+    {
+        return '/usr/bin/php'.$site->php_version;
     }
 
     public static function wrap(Site $site, string $command, bool $cdToSitePath = false): string

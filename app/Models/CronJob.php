@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\CronjobStatus;
+use App\Helpers\SiteShellEnvironment;
 use Database\Factories\CronJobFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -73,6 +74,7 @@ class CronJob extends AbstractModel
     {
         $data = '';
         $cronJobs = $server->cronJobs()
+            ->with('site.isolatedUser')
             ->where('user', $user)
             ->whereIn('status', [
                 CronjobStatus::READY,
@@ -83,7 +85,11 @@ class CronJob extends AbstractModel
             ->get();
         /** @var CronJob $cronJob */
         foreach ($cronJobs as $key => $cronJob) {
-            $command = $user === 'root' ? $cronJob->command : self::wrapCommand($cronJob->command);
+            $command = match (true) {
+                $user === 'root' => $cronJob->command,
+                $cronJob->site?->isolated_user_id !== null && $user === $cronJob->site->user => SiteShellEnvironment::wrap($cronJob->site, $cronJob->command, true),
+                default => self::wrapCommand($cronJob->command),
+            };
             $data .= $cronJob->frequency.' '.$command;
             if ($key != count($cronJobs) - 1) {
                 $data .= "\n";

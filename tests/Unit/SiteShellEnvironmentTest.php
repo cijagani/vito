@@ -7,7 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-test('collect returns empty when no tools are installed', function () {
+test('collect returns deterministic php runtime when no optional tools are installed', function () {
     $site = Site::factory()->create([
         'server_id' => $this->server->id,
         'user' => 'isolated-empty',
@@ -16,7 +16,14 @@ test('collect returns empty when no tools are installed', function () {
         'type_data' => [],
     ]);
 
-    expect(SiteShellEnvironment::collect($site))->toBe([]);
+    $environment = SiteShellEnvironment::collect($site);
+
+    expect($environment['VITO_SITE_ID'])->toBe((string) $site->id)
+        ->and($environment['PHP_VERSION'])->toBe('8.2')
+        ->and($environment['PHP_BINARY'])->toBe('/usr/bin/php8.2')
+        ->and($environment['PHP_PATH'])->toBe('/usr/bin/php8.2')
+        ->and($environment['PHP_INI_SCAN_DIR'])->toBe('/etc/php/8.2/cli/conf.d:/var/lib/vito/php-cli/vito-site-'.$site->id)
+        ->and($environment['PATH'])->toStartWith('/home/isolated-empty/bin:');
 });
 
 test('collect returns mise shims on path when a tool is installed', function () {
@@ -32,7 +39,7 @@ test('collect returns mise shims on path when a tool is installed', function () 
     $env = SiteShellEnvironment::collect($site->refresh());
 
     expect($env)->toHaveKey('PATH');
-    expect($env['PATH'])->toStartWith('/home/isolated-node/.local/share/mise/shims:');
+    expect($env['PATH'])->toStartWith('/home/isolated-node/bin:/home/isolated-node/.local/share/mise/shims:');
     $this->assertStringContainsString('/usr/local/bin', $env['PATH']);
     $this->assertStringContainsString('/home/isolated-node/.local/bin', $env['PATH']);
 });
@@ -74,7 +81,7 @@ test('wrap builds bash invocation with env and optional cd', function () {
     $site->refresh();
 
     $withoutCd = SiteShellEnvironment::wrap($site, 'node -v');
-    expect($withoutCd)->toStartWith("bash -c '");
+    expect($withoutCd)->toStartWith('bash -c ');
     $this->assertStringContainsString('export PATH=', $withoutCd);
     $this->assertStringContainsString('node -v', $withoutCd);
     $this->assertStringNotContainsString('cd ', $withoutCd);

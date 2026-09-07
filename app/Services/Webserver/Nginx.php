@@ -2,6 +2,8 @@
 
 namespace App\Services\Webserver;
 
+use App\Actions\PHP\EnsureSitePhpRuntime;
+use App\Actions\PHP\FinalizeSitePhpRuntimeMigration;
 use App\Actions\Site\EnsureSiteVerificationKey;
 use App\Actions\Webserver\ApplyNginxSiteConfig;
 use App\Actions\Webserver\EnsureNginxRuntimeIdentity;
@@ -93,7 +95,9 @@ class Nginx extends AbstractWebserver implements HasLogs
      */
     public function createVHost(Site $site): void
     {
+        app(EnsureSitePhpRuntime::class)->ensure($site);
         app(ApplyNginxSiteConfig::class)->apply($site);
+        app(FinalizeSitePhpRuntimeMigration::class)->finalize($site);
     }
 
     /**
@@ -105,7 +109,12 @@ class Nginx extends AbstractWebserver implements HasLogs
             return;
         }
 
+        $managedVhost = $vhost === null;
+        app(EnsureSitePhpRuntime::class)->ensure($site);
         app(ApplyNginxSiteConfig::class)->apply($site, $vhost, $restart);
+        if ($managedVhost) {
+            app(FinalizeSitePhpRuntimeMigration::class)->finalize($site);
+        }
     }
 
     /**

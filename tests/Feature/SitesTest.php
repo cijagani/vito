@@ -1,7 +1,9 @@
 <?php
 
+use App\Actions\Site\UpdatePHPVersion;
 use App\Enums\ServiceStatus;
 use App\Enums\SiteStatus;
+use App\Exceptions\SSHCommandError;
 use App\Facades\SSH;
 use App\Models\Database;
 use App\Models\DatabaseUser;
@@ -131,6 +133,38 @@ test('create site requires explicit shared trust group confirmation', function (
     ]);
 });
 
+test('create site rejects a different php version for a shared user', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    Service::query()->create([
+        'server_id' => $this->server->id,
+        'type' => 'php',
+        'name' => 'php',
+        'version' => '8.4',
+        'status' => ServiceStatus::READY,
+    ]);
+    Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'shared',
+        'domain' => 'first.example.com',
+        'path' => '/home/shared/first.example.com',
+        'php_version' => '8.2',
+    ]);
+
+    $this->post(route('sites.store', ['server' => $this->server]), [
+        'type' => PHPBlank::id(),
+        'domain' => 'second.example.com',
+        'aliases' => [],
+        'php_version' => '8.4',
+        'web_directory' => 'public',
+        'user' => 'shared',
+        'shared_user' => true,
+    ])->assertSessionHasErrors('php_version');
+
+    $this->assertDatabaseMissing('sites', ['domain' => 'second.example.com']);
+});
+
 test('isolated users endpoint lists users with counts', function () {
     $this->actingAs($this->user);
 
@@ -221,7 +255,7 @@ test('delete last isolated site removes user', function () {
     SSH::assertExecutedContains('userdel');
 });
 
-test('php version switch removes old pool when not shared', function () {
+test('php version switch removes the site keyed and legacy old pools', function () {
     SSH::fake();
 
     $this->actingAs($this->user);
@@ -234,35 +268,29 @@ test('php version switch removes old pool when not shared', function () {
         'status' => ServiceStatus::READY,
     ]);
 
-    Site::factory()->create([
+    $site = Site::factory()->create([
         'server_id' => $this->server->id,
-        'user' => 'shared',
-        'domain' => 'a.test',
-        'path' => '/home/shared/a.test',
+        'user' => 'versioned',
+        'domain' => 'versioned.test',
+        'path' => '/home/versioned/versioned.test',
         'php_version' => '8.2',
-    ]);
-    $siteB = Site::factory()->create([
-        'server_id' => $this->server->id,
-        'user' => 'shared',
-        'domain' => 'b.test',
-        'path' => '/home/shared/b.test',
-        'php_version' => '8.4',
     ]);
 
     $this->patch(route('site-settings.update-php-version', [
         'server' => $this->server->id,
-        'site' => $siteB->id,
+        'site' => $site->id,
     ]), [
-        'version' => '8.2',
+        'version' => '8.4',
     ])->assertSessionDoesntHaveErrors();
 
-    $siteB->refresh();
-    expect($siteB->php_version)->toBe('8.2');
+    $site->refresh();
+    expect($site->php_version)->toBe('8.4');
 
-    SSH::assertExecutedContains('rm -f /etc/php/8.4/fpm/pool.d/shared.conf');
+    SSH::assertExecutedContains('/etc/php/8.2/fpm/pool.d/vito-site-'.$site->id.'.conf');
+    SSH::assertExecutedContains('/etc/php/8.2/fpm/pool.d/versioned.conf');
 });
 
-test('php version switch preserves shared old pool', function () {
+test('php version switch updates every site sharing the user', function () {
     SSH::fake();
 
     $this->actingAs($this->user);
@@ -275,7 +303,7 @@ test('php version switch preserves shared old pool', function () {
         'status' => ServiceStatus::READY,
     ]);
 
-    Site::factory()->create([
+    $siteA = Site::factory()->create([
         'server_id' => $this->server->id,
         'user' => 'shared',
         'domain' => 'a.test',
@@ -297,10 +325,68 @@ test('php version switch preserves shared old pool', function () {
         'version' => '8.4',
     ])->assertSessionDoesntHaveErrors();
 
+    $siteA->refresh();
     $siteB->refresh();
-    expect($siteB->php_version)->toBe('8.4');
+    expect($siteA->php_version)->toBe('8.4')
+        ->and($siteB->php_version)->toBe('8.4');
 
-    SSH::assertNotExecutedContains('rm -f /etc/php/8.2/fpm/pool.d/shared.conf');
+    SSH::assertExecutedContains('/etc/php/8.4/fpm/pool.d/vito-site-'.$siteA->id.'.conf');
+    SSH::assertExecutedContains('/etc/php/8.4/fpm/pool.d/vito-site-'.$siteB->id.'.conf');
+    SSH::assertExecutedContains('/etc/php/8.2/fpm/pool.d/shared.conf');
+});
+
+test('isolated php version switch requires managed vhosts across the shared group', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    Service::query()->create([
+        'server_id' => $this->server->id,
+        'type' => 'php',
+        'name' => 'php',
+        'version' => '8.4',
+        'status' => ServiceStatus::READY,
+    ]);
+    $site = Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'custom-vhost',
+        'domain' => 'custom-vhost.test',
+        'path' => '/home/custom-vhost/custom-vhost.test',
+        'php_version' => '8.2',
+        'vhost_template' => 'custom',
+    ]);
+
+    $this->patch(route('site-settings.update-php-version', [
+        'server' => $this->server->id,
+        'site' => $site->id,
+    ]), [
+        'version' => '8.4',
+    ])->assertSessionHasErrors('version');
+
+    expect($site->fresh()->php_version)->toBe('8.2');
+});
+
+test('failed isolated php version switch restores the database version', function () {
+    Service::query()->create([
+        'server_id' => $this->server->id,
+        'type' => 'php',
+        'name' => 'php',
+        'version' => '8.4',
+        'status' => ServiceStatus::READY,
+    ]);
+    $site = Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'rollback-php',
+        'domain' => 'rollback-php.test',
+        'path' => '/home/rollback-php/rollback-php.test',
+        'php_version' => '8.2',
+    ]);
+    $ssh = SSH::fake();
+    $ssh->execWillFail();
+
+    expect(fn () => app(UpdatePHPVersion::class)->update($site, ['version' => '8.4']))
+        ->toThrow(SSHCommandError::class);
+
+    expect($site->fresh()->php_version)->toBe('8.2');
 });
 
 test('create site failed due to source control', function (int $status) {

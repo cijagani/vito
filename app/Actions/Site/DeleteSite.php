@@ -54,12 +54,13 @@ class DeleteSite
         try {
             $site->webserver()->deleteSite($site);
 
-            if ($site->type()->language() === 'php' && ! $site->fpmPoolSharedWithSiblings()) {
+            if ($site->type()->language() === 'php' && $site->php_version) {
                 /** @var Service $phpService */
-                $phpService = $site->server->php();
+                $phpService = $site->server->php($site->php_version);
                 /** @var PHP $php */
                 $php = $phpService->handler();
-                $php->removeFpmPool($site->user, $site->php_version, $site->id);
+                $php->removeSiteFpmPool($site);
+                $php->removeLegacyFpmPoolIfLastConsumer($site);
             }
 
             $isLastSibling = ! $site->userSharedWithSiblings();

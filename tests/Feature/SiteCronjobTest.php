@@ -3,6 +3,8 @@
 use App\Enums\CronjobStatus;
 use App\Facades\SSH;
 use App\Models\CronJob;
+use App\Models\Site;
+use App\SiteTypes\Laravel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
 
@@ -103,6 +105,51 @@ test('create site cronjob for isolated user', function () {
 
     SSH::assertExecutedContains("echo '* * * * * bash -lc '\\''ls -la'\\''' | sudo -u example crontab -");
     SSH::assertExecutedContains('sudo -u example crontab -l');
+});
+
+test('isolated site cronjob cannot run as the server control user', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    $this->site->user = 'example';
+    $this->site->save();
+
+    $this->post(route('cronjobs.site.store', [
+        'server' => $this->server,
+        'site' => $this->site,
+    ]), [
+        'command' => 'php artisan schedule:run',
+        'user' => 'vito',
+        'frequency' => '* * * * *',
+    ])->assertSessionHasErrors('user');
+});
+
+test('managed isolated site cronjob receives the site php runtime', function () {
+    $site = Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'managed-cron',
+        'domain' => 'managed-cron.test',
+        'path' => '/home/managed-cron/managed-cron.test',
+        'type' => Laravel::id(),
+        'php_version' => '8.2',
+    ]);
+    CronJob::factory()->create([
+        'server_id' => $this->server->id,
+        'site_id' => $site->id,
+        'user' => $site->user,
+        'command' => 'php artisan schedule:run',
+        'frequency' => '* * * * *',
+        'status' => CronjobStatus::READY,
+    ]);
+
+    $crontab = CronJob::crontab($this->server, $site->user);
+
+    expect($crontab)->toContain('export PHP_BINARY=')
+        ->toContain('/usr/bin/php8.2')
+        ->toContain('PHP_INI_SCAN_DIR=')
+        ->toContain('cd ')
+        ->toContain($site->path)
+        ->toContain('php artisan schedule:run');
 });
 
 test('cannot create site cronjob for non existing user', function () {

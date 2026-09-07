@@ -2,6 +2,8 @@
 
 namespace App\Services\Webserver;
 
+use App\Actions\PHP\EnsureSitePhpRuntime;
+use App\Actions\PHP\FinalizeSitePhpRuntimeMigration;
 use App\Actions\Site\EnsureSiteVerificationKey;
 use App\Actions\Webserver\GenerateCaddyConfig;
 use App\DTOs\ServiceLog;
@@ -104,6 +106,7 @@ class Caddy extends AbstractWebserver implements HasLogs
      */
     public function createVHost(Site $site): void
     {
+        app(EnsureSitePhpRuntime::class)->ensure($site);
         // We need to get the isolated user first, if the site is isolated
         // otherwise, use the default ssh user
         $ssh = $this->service->server->ssh($site->user);
@@ -115,7 +118,6 @@ class Caddy extends AbstractWebserver implements HasLogs
             'create-path',
             $site->id
         );
-
         $this->service->server->ssh()->write(
             '/etc/caddy/sites-available/'.$site->domain,
             $this->generateVhost($site),
@@ -129,6 +131,7 @@ class Caddy extends AbstractWebserver implements HasLogs
             'create-vhost',
             $site->id
         );
+        app(FinalizeSitePhpRuntimeMigration::class)->finalize($site);
     }
 
     public function generateVhost(Site $site, ?string $template = null): string
@@ -147,6 +150,8 @@ class Caddy extends AbstractWebserver implements HasLogs
             return;
         }
 
+        $managedVhost = $vhost === null;
+        app(EnsureSitePhpRuntime::class)->ensure($site);
         if (! $vhost) {
             $vhost = $this->generateVhost($site);
         }
@@ -159,11 +164,17 @@ class Caddy extends AbstractWebserver implements HasLogs
 
         if ($restart) {
             $this->service->server->systemd()->restart('caddy');
+            if ($managedVhost) {
+                app(FinalizeSitePhpRuntimeMigration::class)->finalize($site);
+            }
 
             return;
         }
 
         $this->service->server->systemd()->reload('caddy');
+        if ($managedVhost) {
+            app(FinalizeSitePhpRuntimeMigration::class)->finalize($site);
+        }
     }
 
     /**

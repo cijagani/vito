@@ -3,10 +3,10 @@
 namespace App\Actions\Site;
 
 use App\Exceptions\SSHError;
-use App\Models\Service;
 use App\Models\Site;
 use App\Services\PHP\PHP;
 use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -31,7 +31,7 @@ class UpdatePHPVersion
             ],
         ])->validate();
 
-        $newVersion = $input['version'];
+        $newVersion = (string) $input['version'];
         $oldVersion = $site->php_version;
 
         if ($oldVersion === $newVersion) {
@@ -39,6 +39,9 @@ class UpdatePHPVersion
         }
 
         if ($site->isIsolated()) {
+            $sites = $this->isolatedPhpSites($site);
+            $this->validateGroupSwitch($sites, $oldVersion);
+
             $lock = $site->isolatedUser?->lock() ?? $site->server->isolatedUserLock($site->user);
 
             try {
@@ -50,35 +53,27 @@ class UpdatePHPVersion
             }
 
             try {
-                /** @var Service $phpService */
-                $phpService = $site->server->php();
-                /** @var PHP $php */
-                $php = $phpService->handler();
-
-                $php->createFpmPool($site->user, $newVersion);
+                $sites = $this->isolatedPhpSites($site->fresh());
+                $this->validateGroupSwitch($sites, $oldVersion);
 
                 try {
-                    if (! $site->fpmPoolSharedWithSiblings($oldVersion)) {
-                        $php->removeFpmPool($site->user, $oldVersion, $site->id);
+                    foreach ($sites as $runtimeSite) {
+                        $runtimeSite->php_version = $newVersion;
+                        $runtimeSite->save();
+                        app(SyncSiteRuntimeProfiles::class)->sync($runtimeSite);
                     }
 
-                    $site->php_version = $newVersion;
-                    $site->save();
-                    app(SyncSiteRuntimeProfiles::class)->sync($site);
-
-                    $site->webserver()->updateVHost($site);
+                    foreach ($sites as $runtimeSite) {
+                        $runtimeSite->webserver()->updateVHost($runtimeSite);
+                        app(RefreshSiteRuntimeConsumers::class)->refresh($runtimeSite);
+                    }
                 } catch (Throwable $e) {
-                    Log::error('PHP version switch left orphan FPM pool', [
-                        'site_id' => $site->id,
-                        'server_id' => $site->server_id,
-                        'user' => $site->user,
-                        'old_version' => $oldVersion,
-                        'new_version' => $newVersion,
-                        'exception' => $e->getMessage(),
-                    ]);
+                    $this->rollbackGroup($sites, $oldVersion, $newVersion);
 
                     throw $e;
                 }
+
+                $this->cleanupOldRuntime($sites, $oldVersion, $newVersion);
             } finally {
                 $lock->release();
             }
@@ -91,5 +86,100 @@ class UpdatePHPVersion
         app(SyncSiteRuntimeProfiles::class)->sync($site);
 
         $site->webserver()->updateVHost($site);
+    }
+
+    /**
+     * @return Collection<int, Site>
+     */
+    private function isolatedPhpSites(Site $site): Collection
+    {
+        if ($site->isolated_user_id === null) {
+            return new Collection([$site]);
+        }
+
+        return $site->siblingsSharingUser(includeSelf: true)
+            ->whereNotNull('php_version')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @param  Collection<int, Site>  $sites
+     */
+    private function validateGroupSwitch(Collection $sites, string $oldVersion): void
+    {
+        if ($sites->contains(fn (Site $site) => ! $site->vhost_generation_enabled || $site->vhost_template !== null)) {
+            throw ValidationException::withMessages([
+                'version' => 'Every site sharing this user must use a managed default vhost before changing PHP.',
+            ]);
+        }
+
+        if ($sites->contains(fn (Site $site) => $site->php_version !== $oldVersion)) {
+            throw ValidationException::withMessages([
+                'version' => 'Sites sharing this user have inconsistent PHP versions and must be aligned before a group switch.',
+            ]);
+        }
+    }
+
+    /**
+     * @param  Collection<int, Site>  $sites
+     */
+    private function rollbackGroup(Collection $sites, string $oldVersion, string $newVersion): void
+    {
+        foreach ($sites as $runtimeSite) {
+            $runtimeSite->php_version = $oldVersion;
+            $runtimeSite->save();
+            app(SyncSiteRuntimeProfiles::class)->sync($runtimeSite);
+        }
+
+        foreach ($sites as $runtimeSite) {
+            try {
+                $runtimeSite->webserver()->updateVHost($runtimeSite);
+                app(RefreshSiteRuntimeConsumers::class)->refresh($runtimeSite);
+
+                $newService = $runtimeSite->server->php($newVersion);
+                if ($newService) {
+                    /** @var PHP $newPhp */
+                    $newPhp = $newService->handler();
+                    $newPhp->removeSiteFpmPool($runtimeSite, $newVersion);
+                }
+            } catch (Throwable $rollbackException) {
+                Log::error('PHP version group switch rollback requires manual repair', [
+                    'site_id' => $runtimeSite->id,
+                    'server_id' => $runtimeSite->server_id,
+                    'old_version' => $oldVersion,
+                    'new_version' => $newVersion,
+                    'exception' => $rollbackException->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<int, Site>  $sites
+     */
+    private function cleanupOldRuntime(Collection $sites, string $oldVersion, string $newVersion): void
+    {
+        foreach ($sites as $runtimeSite) {
+            try {
+                $oldService = $runtimeSite->server->php($oldVersion);
+                if (! $oldService) {
+                    continue;
+                }
+
+                /** @var PHP $oldPhp */
+                $oldPhp = $oldService->handler();
+                $oldPhp->removeSiteFpmPool($runtimeSite, $oldVersion);
+                $oldPhp->retireLegacyFpmPoolIfUnused($runtimeSite, $oldVersion);
+            } catch (Throwable $cleanupException) {
+                Log::warning('Old PHP-FPM runtime could not be removed after version switch', [
+                    'site_id' => $runtimeSite->id,
+                    'server_id' => $runtimeSite->server_id,
+                    'old_version' => $oldVersion,
+                    'new_version' => $newVersion,
+                    'exception' => $cleanupException->getMessage(),
+                ]);
+            }
+        }
     }
 }

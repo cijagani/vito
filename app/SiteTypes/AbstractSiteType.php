@@ -2,6 +2,7 @@
 
 namespace App\SiteTypes;
 
+use App\Actions\PHP\EnsureSitePhpRuntime;
 use App\Actions\Webserver\PrepareNginxSiteFilesystem;
 use App\DTOs\SocketEventDTO;
 use App\Enums\IsolatedUserManagementState;
@@ -12,9 +13,7 @@ use App\Exceptions\SSHError;
 use App\Helpers\SiteShellEnvironment;
 use App\Http\Resources\SiteResource;
 use App\Models\Deployment;
-use App\Models\Service;
 use App\Models\Site;
-use App\Services\PHP\PHP;
 use App\Services\Webserver\Nginx;
 use App\SSH\OS\Git;
 use App\Tooling\SiteToolingState;
@@ -207,20 +206,7 @@ abstract class AbstractSiteType implements SiteType
             $isolatedUser->managed_at ??= now();
             $isolatedUser->save();
 
-            if ($this->site->php_version) {
-                $service = $this->site->php();
-                if (! $service instanceof Service) {
-                    throw new RuntimeException('PHP service not found');
-                }
-                if (! $this->site->fpmPoolSharedWithSiblings() && ! $this->fpmPoolExists($this->site->user, $this->site->php_version)) {
-                    /** @var PHP $php */
-                    $php = $service->handler();
-                    $php->createFpmPool(
-                        $this->site->user,
-                        $this->site->php_version
-                    );
-                }
-            }
+            app(EnsureSitePhpRuntime::class)->ensure($this->site);
         } finally {
             $lock->release();
         }
@@ -253,23 +239,6 @@ abstract class AbstractSiteType implements SiteType
         try {
             $this->site->server->ssh($this->site->user)->exec(view('ssh.site.check-repository-cloned', [
                 'path' => $this->site->path,
-            ]));
-
-            return true;
-        } catch (SSHCommandError) {
-            return false;
-        }
-    }
-
-    /**
-     * @throws SSHError
-     */
-    protected function fpmPoolExists(string $user, string $version): bool
-    {
-        try {
-            $this->site->server->ssh()->exec(view('ssh.site.check-fpm-pool-exists', [
-                'user' => $user,
-                'version' => $version,
             ]));
 
             return true;

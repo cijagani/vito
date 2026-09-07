@@ -19,9 +19,17 @@ fi
 
 sudo install -d -o root -g root -m 0700 /var/lib/vito/nginx
 
+@if ($needsLegacySocketAccess)
 if getent group "$VITO_LEGACY_SOCKET_GROUP" >/dev/null 2>&1 && ! id -nG "$VITO_NGINX_USER" | tr ' ' '\n' | grep -qx "$VITO_LEGACY_SOCKET_GROUP"; then
     sudo usermod -a -G "$VITO_LEGACY_SOCKET_GROUP" "$VITO_NGINX_USER"
+    VITO_NGINX_CHANGED=1
 fi
+@else
+if getent group "$VITO_LEGACY_SOCKET_GROUP" >/dev/null 2>&1 && id -nG "$VITO_NGINX_USER" | tr ' ' '\n' | grep -qx "$VITO_LEGACY_SOCKET_GROUP"; then
+    sudo gpasswd -d "$VITO_NGINX_USER" "$VITO_LEGACY_SOCKET_GROUP" >/dev/null
+    VITO_NGINX_CHANGED=1
+fi
+@endif
 
 @foreach ($siteUsers as $siteUser)
 if getent group {!! escapeshellarg($siteUser) !!} >/dev/null 2>&1 && id -nG "$VITO_NGINX_USER" | tr ' ' '\n' | grep -qx {!! escapeshellarg($siteUser) !!}; then

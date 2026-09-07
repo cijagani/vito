@@ -80,9 +80,35 @@ final readonly class SiteRuntimeArtifacts
         return '/etc/php/'.$phpVersion.'/fpm/pool.d/'.$this->key().'.conf';
     }
 
-    public function fpmSocketPath(): string
+    public function fpmSocketPath(string $phpVersion): string
     {
-        return '/run/php/'.$this->key().'.sock';
+        $this->ensurePhpVersion($phpVersion);
+
+        return '/run/php/'.$this->key().'-php'.$phpVersion.'.sock';
+    }
+
+    public function fpmLegacyPoolPath(string $phpVersion, string $user): string
+    {
+        $this->ensurePhpVersion($phpVersion);
+        $this->ensureUser($user);
+
+        return '/etc/php/'.$phpVersion.'/fpm/pool.d/'.$user.'.conf';
+    }
+
+    public function fpmStateDirectory(string $phpVersion): string
+    {
+        $this->ensurePhpVersion($phpVersion);
+
+        return '/var/lib/vito/php-fpm/'.$phpVersion.'/'.$this->key();
+    }
+
+    public function fpmCandidatePath(string $phpVersion, string $checksum): string
+    {
+        if (preg_match('/\A[a-f0-9]{64}\z/', $checksum) !== 1) {
+            throw new InvalidArgumentException('A SHA-256 checksum is required for a PHP-FPM candidate.');
+        }
+
+        return $this->fpmStateDirectory($phpVersion).'/candidate-'.$checksum.'.conf';
     }
 
     public function logDirectory(): string
@@ -97,7 +123,17 @@ final readonly class SiteRuntimeArtifacts
 
     public function phpCliProfilePath(): string
     {
-        return '/etc/profile.d/'.$this->key().'.sh';
+        return $this->phpCliIniDirectory().'/environment.sh';
+    }
+
+    public function phpCliIniDirectory(): string
+    {
+        return '/var/lib/vito/php-cli/'.$this->key();
+    }
+
+    public function phpCliIniPath(): string
+    {
+        return $this->phpCliIniDirectory().'/99-vito-site.ini';
     }
 
     public function systemdLimitsPath(): string
@@ -138,6 +174,13 @@ final readonly class SiteRuntimeArtifacts
     {
         if (preg_match('/\A[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?\z/i', $domain) !== 1) {
             throw new InvalidArgumentException('A normalized hostname is required for a legacy Nginx artifact.');
+        }
+    }
+
+    private function ensureUser(string $user): void
+    {
+        if (preg_match('/\A[a-z_][a-z0-9_-]*[a-z0-9]\z/', $user) !== 1) {
+            throw new InvalidArgumentException('A normalized Linux username is required.');
         }
     }
 }

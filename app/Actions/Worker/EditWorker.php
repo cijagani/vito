@@ -25,7 +25,8 @@ class EditWorker
             ]);
         }
 
-        $this->validate($worker, $input, $worker->site);
+        $site = $this->resolveSite($worker, $input);
+        $this->validate($worker, $input, $site);
 
         $siteId = $worker->site_id;
         if (isset($input['site_id'])) {
@@ -52,6 +53,10 @@ class EditWorker
 
     private function validate(Worker $worker, array $input, ?Site $site = null): void
     {
+        $allowedUsers = $site?->isIsolated()
+            ? [$site->user]
+            : ($site?->getSshUsers() ?? $worker->server->getSshUsers());
+
         $rules = [
             'name' => [
                 'required',
@@ -72,7 +77,7 @@ class EditWorker
             ],
             'user' => [
                 'required',
-                Rule::in($site?->getSshUsers() ?? $worker->server->getSshUsers()),
+                Rule::in($allowedUsers),
             ],
             'auto_start' => [
                 'required',
@@ -98,5 +103,28 @@ class EditWorker
         }
 
         Validator::make($input, $rules)->validate();
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    private function resolveSite(Worker $worker, array $input): ?Site
+    {
+        if (! array_key_exists('site_id', $input)) {
+            return $worker->site;
+        }
+
+        if (empty($input['site_id'])) {
+            return null;
+        }
+
+        $siteId = filter_var($input['site_id'], FILTER_VALIDATE_INT);
+        if ($siteId === false) {
+            return null;
+        }
+
+        return Site::query()
+            ->where('server_id', $worker->server_id)
+            ->find($siteId);
     }
 }

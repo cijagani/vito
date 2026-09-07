@@ -2,12 +2,16 @@
 
 namespace App\Services\PHP;
 
+use App\Actions\PHP\ApplySiteFpmConfig;
 use App\DTOs\ServiceLog;
 use App\Exceptions\SSHCommandError;
 use App\Exceptions\SSHError;
+use App\Models\Site;
+use App\Models\SiteRuntimeProfile;
 use App\Services\AbstractService;
 use App\Services\HasLogs;
 use Closure;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -156,6 +160,124 @@ class PHP extends AbstractService implements HasLogs
     /**
      * @throws SSHError
      */
+    public function createSiteFpmPool(Site $site): void
+    {
+        app(ApplySiteFpmConfig::class)->apply($site);
+    }
+
+    /**
+     * @throws SSHError
+     */
+    public function removeSiteFpmPool(Site $site, ?string $phpVersion = null): void
+    {
+        $version = $phpVersion ?? $site->php_version;
+        if ($version === '') {
+            return;
+        }
+
+        $artifacts = $site->runtimeArtifacts();
+        $removingCurrentRuntime = $phpVersion === null || $version === $site->php_version;
+        $this->service->server->ssh()->exec(
+            view('ssh.services.php.remove-site-fpm-pool', [
+                'targetPath' => $artifacts->fpmPoolPath($version),
+                'socketPath' => $artifacts->fpmSocketPath($version),
+                'stateDirectory' => $artifacts->fpmStateDirectory($version),
+                'cliRuntimeDirectory' => $artifacts->phpCliIniDirectory(),
+                'sitePhpLink' => '/home/'.$site->user.'/bin/php',
+                'removeCliRuntime' => $removingCurrentRuntime,
+                'removeSitePhpLink' => $removingCurrentRuntime && ! $site->userSharedWithSiblings(),
+                'fpmBinary' => '/usr/sbin/php-fpm'.$version,
+                'serviceUnit' => 'php'.$version.'-fpm',
+            ]),
+            'remove-site-fpm-pool',
+            $site->id,
+        );
+    }
+
+    public function retireLegacyFpmPoolIfUnused(Site $site, ?string $phpVersion = null): bool
+    {
+        $version = $phpVersion ?? $site->php_version;
+        $hasUnmigratedSibling = Site::query()
+            ->where('server_id', $site->server_id)
+            ->where('user', $site->user)
+            ->where('php_version', $version)
+            ->where(function ($query): void {
+                $query->whereDoesntHave('runtimeProfile')
+                    ->orWhereHas('runtimeProfile', fn ($profile) => $profile
+                        ->whereNull('legacy_fpm_migrated_at'));
+            })
+            ->exists();
+
+        if ($hasUnmigratedSibling) {
+            return false;
+        }
+
+        try {
+            $this->removeLegacyFpmPool($site, $version);
+        } catch (SSHError $exception) {
+            Log::warning('Legacy PHP-FPM pool could not be retired after site migration', [
+                'site_id' => $site->id,
+                'server_id' => $site->server_id,
+                'php_version' => $version,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        SiteRuntimeProfile::query()
+            ->whereHas('site', fn ($query) => $query
+                ->where('server_id', $site->server_id)
+                ->where('user', $site->user)
+                ->where('php_version', $version))
+            ->update(['legacy_fpm_retired_at' => now()]);
+
+        return true;
+    }
+
+    /**
+     * @throws SSHError
+     */
+    public function removeLegacyFpmPoolIfLastConsumer(Site $site): void
+    {
+        $hasLegacyDependentSibling = Site::query()
+            ->where('server_id', $site->server_id)
+            ->where('user', $site->user)
+            ->where('php_version', $site->php_version)
+            ->whereKeyNot($site->id)
+            ->where(function ($query): void {
+                $query->whereDoesntHave('runtimeProfile')
+                    ->orWhereHas('runtimeProfile', fn ($profile) => $profile
+                        ->whereNull('legacy_fpm_migrated_at'));
+            })
+            ->exists();
+
+        if (! $hasLegacyDependentSibling) {
+            $this->removeLegacyFpmPool($site);
+        }
+    }
+
+    /**
+     * @throws SSHError
+     */
+    private function removeLegacyFpmPool(Site $site, ?string $phpVersion = null): void
+    {
+        $version = $phpVersion ?? $site->php_version;
+        $this->service->server->ssh()->exec(
+            view('ssh.services.php.remove-legacy-site-fpm-pool', [
+                'targetPath' => $site->runtimeArtifacts()->fpmLegacyPoolPath($version, (string) $site->user),
+                'stateDirectory' => $site->runtimeArtifacts()->fpmStateDirectory($version),
+                'fpmBinary' => '/usr/sbin/php-fpm'.$version,
+                'serviceUnit' => 'php'.$version.'-fpm',
+            ]),
+            'remove-legacy-site-fpm-pool',
+            $site->id,
+        );
+    }
+
+    /**
+     * @throws SSHError
+     */
     public function removeFpmPool(string $user, string $version, ?int $siteId): void
     {
         $this->service->server->ssh()->exec(
@@ -208,23 +330,18 @@ class PHP extends AbstractService implements HasLogs
             : $this->service->server->sites()
                 ->where('php_version', $version)
                 ->orderBy('id')
-                ->get(['id', 'domain', 'user']);
+                ->get(['id', 'domain', 'user', 'isolated_user_id']);
 
-        /** @var array<string, array<int, string>> $domainsByUser */
-        $domainsByUser = [];
         foreach ($sites as $site) {
-            $user = $site->user;
-            $domainsByUser[$user] = $domainsByUser[$user] ?? [];
-            $domainsByUser[$user][] = $site->domain;
-        }
-
-        foreach ($domainsByUser as $user => $domains) {
+            $target = $site->isIsolated()
+                ? $site->runtimeArtifacts()->logDirectory().'/php-error.log'
+                : '/home/'.$site->user.'/.logs/php_errors.log';
             $logs[] = new ServiceLog(
-                key: 'php:'.$version.':user:'.$user,
+                key: 'php:'.$version.':site:'.$site->id,
                 serviceLabel: $serviceLabel,
-                label: 'FPM pool '.$user.' ('.implode(', ', $domains).')',
+                label: 'FPM pool '.$site->domain,
                 source: ServiceLog::SOURCE_FILE,
-                target: '/home/'.$user.'/.logs/php_errors.log',
+                target: $target,
             );
         }
 

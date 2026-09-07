@@ -1,9 +1,12 @@
 <?php
 
+use App\Actions\Site\RefreshSiteRuntimeConsumers;
 use App\Actions\Worker\RefreshSiteWorkerConfigs;
+use App\Enums\CronjobStatus;
 use App\Enums\SiteStatus;
 use App\Enums\WorkerStatus;
 use App\Facades\SSH;
+use App\Models\CronJob;
 use App\Models\Site;
 use App\Models\SourceControl;
 use App\Models\Worker;
@@ -33,7 +36,7 @@ beforeEach(function () {
     ]);
 });
 
-test('effective environment is empty when no tooling installed', function () {
+test('effective environment includes deterministic php runtime without optional tooling', function () {
     $worker = Worker::factory()->create([
         'server_id' => $this->server->id,
         'site_id' => $this->isolatedSite->id,
@@ -43,7 +46,11 @@ test('effective environment is empty when no tooling installed', function () {
         'status' => WorkerStatus::RUNNING,
     ]);
 
-    expect($worker->effectiveEnvironment())->toBe([]);
+    $environment = $worker->effectiveEnvironment();
+
+    expect($environment['PHP_BINARY'])->toBe('/usr/bin/php8.2')
+        ->and($environment['PHP_INI_SCAN_DIR'])->toContain('/var/lib/vito/php-cli/vito-site-'.$this->isolatedSite->id)
+        ->and($environment['PATH'])->toStartWith('/home/isolated-foo/bin:');
 });
 
 test('effective environment includes tooling when installed', function () {
@@ -80,6 +87,32 @@ test('effective environment overlays tooling over user supplied', function () {
     expect($env['CUSTOM'])->toBe('value');
     $this->assertStringContainsString('/home/isolated-foo/.local/share/mise/shims', $env['PATH']);
     $this->assertStringNotContainsString('/user/path', $env['PATH']);
+});
+
+test('runtime consumer refresh rewrites workers and site cron with php environment', function () {
+    $fake = SSH::fake();
+    $worker = Worker::factory()->create([
+        'server_id' => $this->server->id,
+        'site_id' => $this->isolatedSite->id,
+        'user' => 'isolated-foo',
+        'command' => 'php artisan queue:work',
+        'status' => WorkerStatus::RUNNING,
+    ]);
+    CronJob::factory()->create([
+        'server_id' => $this->server->id,
+        'site_id' => $this->isolatedSite->id,
+        'user' => 'isolated-foo',
+        'command' => 'php artisan schedule:run',
+        'frequency' => '* * * * *',
+        'status' => CronjobStatus::READY,
+    ]);
+
+    app(RefreshSiteRuntimeConsumers::class)->refresh($this->isolatedSite);
+
+    $fake->assertExecutedContains('/etc/supervisor/conf.d/'.$worker->id.'.conf');
+    $fake->assertExecutedContains('supervisorctl restart');
+    $fake->assertExecutedContains('PHP_INI_SCAN_DIR=');
+    $fake->assertExecutedContains('/var/lib/vito/php-cli/vito-site-'.$this->isolatedSite->id);
 });
 
 test('server bound worker skips tooling', function () {

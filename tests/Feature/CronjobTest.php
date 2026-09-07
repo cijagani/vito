@@ -284,6 +284,25 @@ test('create cronjob with valid site id', function () {
     ]);
 });
 
+test('server cron form enforces an isolated sites user', function () {
+    SSH::fake();
+    $this->actingAs($this->user);
+
+    $site = Site::factory()->create([
+        'server_id' => $this->server->id,
+        'user' => 'generic-cron',
+        'domain' => 'generic-cron.test',
+        'path' => '/home/generic-cron/generic-cron.test',
+    ]);
+
+    $this->post(route('cronjobs.store', ['server' => $this->server]), [
+        'command' => 'php artisan schedule:run',
+        'user' => 'vito',
+        'frequency' => '* * * * *',
+        'site_id' => $site->id,
+    ])->assertSessionHasErrors('user');
+});
+
 test('cannot create cronjob with invalid site id', function () {
     SSH::fake();
     $this->actingAs($this->user);

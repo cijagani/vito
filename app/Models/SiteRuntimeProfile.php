@@ -35,7 +35,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property ?int $tasks_max
  * @property ?int $disk_quota_mb
  * @property int $desired_revision
+ * @property ?string $desired_checksum
  * @property ?int $applied_revision
+ * @property ?string $applied_checksum
+ * @property ?\Carbon\Carbon $legacy_fpm_migrated_at
+ * @property ?\Carbon\Carbon $legacy_fpm_retired_at
  * @property ?\Carbon\Carbon $last_applied_at
  * @property ?string $last_apply_error
  * @property Site $site
@@ -71,7 +75,11 @@ class SiteRuntimeProfile extends AbstractModel
         'tasks_max',
         'disk_quota_mb',
         'desired_revision',
+        'desired_checksum',
         'applied_revision',
+        'applied_checksum',
+        'legacy_fpm_migrated_at',
+        'legacy_fpm_retired_at',
         'last_applied_at',
         'last_apply_error',
     ];
@@ -102,6 +110,8 @@ class SiteRuntimeProfile extends AbstractModel
         'disk_quota_mb' => 'integer',
         'desired_revision' => 'integer',
         'applied_revision' => 'integer',
+        'legacy_fpm_migrated_at' => 'datetime',
+        'legacy_fpm_retired_at' => 'datetime',
         'last_applied_at' => 'datetime',
         'last_apply_error' => 'encrypted',
     ];

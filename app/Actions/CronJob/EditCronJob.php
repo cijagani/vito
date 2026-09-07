@@ -20,6 +20,7 @@ class EditCronJob
      */
     public function edit(Server $server, CronJob $cronJob, array $input, ?Site $site = null): CronJob
     {
+        $site = $this->resolveSite($server, $input, $site);
         $this->validate($input, $server, $site);
 
         // Sync before editing to preserve any manual cronjobs
@@ -61,13 +62,17 @@ class EditCronJob
 
     private function validate(array $input, Server $server, ?Site $site = null): void
     {
+        $allowedUsers = $site?->isIsolated()
+            ? [$site->user]
+            : ($site?->getSshUsers() ?? $server->getSshUsers());
+
         $rules = [
             'command' => [
                 'required',
             ],
             'user' => [
                 'required',
-                Rule::in($site?->getSshUsers() ?? $server->getSshUsers()),
+                Rule::in($allowedUsers),
             ],
             'frequency' => [
                 'required',
@@ -98,5 +103,28 @@ class EditCronJob
         }
 
         Validator::make($input, $rules)->validate();
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     */
+    private function resolveSite(Server $server, array $input, ?Site $site): ?Site
+    {
+        if ($site instanceof Site || ! array_key_exists('site_id', $input)) {
+            return $site;
+        }
+
+        if (empty($input['site_id'])) {
+            return null;
+        }
+
+        $siteId = filter_var($input['site_id'], FILTER_VALIDATE_INT);
+        if ($siteId === false) {
+            return null;
+        }
+
+        return Site::query()
+            ->where('server_id', $server->id)
+            ->find($siteId);
     }
 }

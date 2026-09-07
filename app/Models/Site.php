@@ -715,9 +715,14 @@ class Site extends AbstractModel
             'BRANCH' => $this->branch ?? '',
             'REPOSITORY' => $this->repository ?? '',
             'COMMIT_ID' => $deployment->commit_id ?? '',
-            'PHP_VERSION' => $this->php_version,
-            'PHP_PATH' => '/usr/bin/php'.$this->php_version,
         ];
+
+        if ($this->php_version) {
+            $variables['PHP_VERSION'] = $this->php_version;
+            $variables['PHP_PATH'] = SiteShellEnvironment::phpBinary($this);
+        }
+
+        $variables = array_merge($variables, SiteShellEnvironment::collect($this));
 
         if ($this->sourceControl?->isGithubApp()) {
             /** @var GithubApp $provider */
@@ -734,7 +739,7 @@ class Site extends AbstractModel
     public function environmentAliases(): array
     {
         return [
-            'php' => '/usr/bin/php'.$this->php_version,
+            'php' => SiteShellEnvironment::phpBinary($this),
         ];
     }
 
