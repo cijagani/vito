@@ -52,6 +52,7 @@ class DeleteSite
         }
 
         try {
+            app(ConfigureSiteLogRotation::class)->remove($site);
             $site->webserver()->deleteSite($site);
 
             if ($site->type()->language() === 'php' && $site->php_version) {

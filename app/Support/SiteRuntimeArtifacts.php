@@ -166,6 +166,11 @@ final readonly class SiteRuntimeArtifacts
         return '/var/log/vito/sites/'.$this->siteId;
     }
 
+    public function logrotatePath(): string
+    {
+        return '/etc/logrotate.d/'.$this->key();
+    }
+
     public function systemdSlice(): string
     {
         return 'site-'.$this->siteId.'.slice';
