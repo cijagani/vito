@@ -44,7 +44,7 @@ class RenderSiteFpmConfig
 
         return new SiteRuntimeConfig(
             SiteRuntimeConfigType::PHP_FPM,
-            $artifacts->fpmPoolPath($site->php_version),
+            $artifacts->fpmConfigPath($site->php_version, $profile->fpm_service_mode),
             $contents,
             $revision,
         );
@@ -67,6 +67,8 @@ class RenderSiteFpmConfig
 
         return view('ssh.services.php.site-fpm-pool', [
             'poolName' => $artifacts->fpmPoolName(),
+            'dedicatedMaster' => $profile->fpm_service_mode === FpmServiceMode::DEDICATED_MASTER,
+            'pidPath' => '/run/php/'.$artifacts->key().'-php'.$site->php_version.'.pid',
             'siteUser' => $site->user,
             'socketPath' => $artifacts->fpmSocketPath($site->php_version),
             'webserverUser' => $webserverUser,
@@ -89,15 +91,15 @@ class RenderSiteFpmConfig
             'temporaryPath' => '/home/'.$site->user.'/tmp/'.$artifacts->key(),
             'errorLogPath' => $artifacts->logDirectory().'/php-error.log',
             'slowLogPath' => $artifacts->logDirectory().'/php-slow.log',
+            'cpuQuotaPercent' => $profile->cpu_quota_percent,
+            'memoryHighMb' => $profile->memory_high_mb,
+            'memoryMaxMb' => $profile->memory_max_mb,
+            'tasksMax' => $profile->tasks_max,
         ])->render();
     }
 
     private function assertValid(Site $site, SiteRuntimeProfile $profile): void
     {
-        if ($profile->fpm_service_mode !== FpmServiceMode::SHARED_MASTER) {
-            throw new LogicException('Dedicated PHP-FPM masters require the hardened runtime stage.');
-        }
-
         if ($profile->php_version !== $site->php_version || ! $site->server->php($site->php_version)) {
             throw new LogicException('The selected PHP version is not installed on the site server.');
         }

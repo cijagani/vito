@@ -1,3 +1,15 @@
+; vito-fpm-service-mode = {{ $dedicatedMaster ? 'dedicated_master' : 'shared_master' }}
+; vito-cpu-quota-percent = {{ $cpuQuotaPercent ?? 'unlimited' }}
+; vito-memory-high-mb = {{ $memoryHighMb ?? 'unlimited' }}
+; vito-memory-max-mb = {{ $memoryMaxMb ?? 'unlimited' }}
+; vito-tasks-max = {{ $tasksMax ?? 'unlimited' }}
+@if ($dedicatedMaster)
+[global]
+pid = {{ $pidPath }}
+error_log = {{ $errorLogPath }}
+daemonize = no
+
+@endif
 [{{ $poolName }}]
 user = {{ $siteUser }}
 group = {{ $siteUser }}

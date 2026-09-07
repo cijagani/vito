@@ -3,6 +3,7 @@
 namespace App\Actions\Site;
 
 use App\DTOs\SiteRuntimeConfig;
+use App\Enums\FpmServiceMode;
 use App\Enums\SiteRuntimeConfigType;
 use App\Enums\SiteRuntimeOperationStatus;
 use App\Models\Site;
@@ -47,7 +48,8 @@ class CreateSiteRuntimeOperation
 
         $expectedTarget = $site->runtimeArtifacts()->expectedTargetPath(
             $config->type,
-            $site->runtimeProfile?->php_version
+            $site->runtimeProfile?->php_version,
+            $site->runtimeProfile->fpm_service_mode ?? FpmServiceMode::SHARED_MASTER,
         );
 
         if ($config->targetPath !== $expectedTarget) {

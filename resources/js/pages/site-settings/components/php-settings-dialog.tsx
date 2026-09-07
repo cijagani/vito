@@ -25,6 +25,10 @@ type RuntimeTuningForm = {
   fpm_max_requests: string;
   request_timeout_seconds: string;
   slow_request_seconds: string;
+  cpu_quota_percent: string;
+  memory_high_mb: string;
+  memory_max_mb: string;
+  tasks_max: string;
   client_max_body_size_mb: string;
   fastcgi_read_timeout_seconds: string;
   proxy_connect_timeout_seconds: string;
@@ -78,6 +82,10 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
     fpm_max_requests: value(tuning?.fpm_max_requests ?? 500),
     request_timeout_seconds: value(tuning?.request_timeout_seconds ?? 60),
     slow_request_seconds: value(tuning?.slow_request_seconds),
+    cpu_quota_percent: value(tuning?.cpu_quota_percent),
+    memory_high_mb: value(tuning?.memory_high_mb),
+    memory_max_mb: value(tuning?.memory_max_mb),
+    tasks_max: value(tuning?.tasks_max),
     client_max_body_size_mb: value(tuning?.client_max_body_size_mb),
     fastcgi_read_timeout_seconds: value(tuning?.fastcgi_read_timeout_seconds),
     proxy_connect_timeout_seconds: value(tuning?.proxy_connect_timeout_seconds),
@@ -104,6 +112,10 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
       fpm_max_requests: Number(data.fpm_max_requests),
       request_timeout_seconds: Number(data.request_timeout_seconds),
       slow_request_seconds: nullableNumber(data.slow_request_seconds),
+      cpu_quota_percent: nullableNumber(data.cpu_quota_percent),
+      memory_high_mb: nullableNumber(data.memory_high_mb),
+      memory_max_mb: nullableNumber(data.memory_max_mb),
+      tasks_max: nullableNumber(data.tasks_max),
       client_max_body_size_mb: nullableNumber(data.client_max_body_size_mb),
       fastcgi_read_timeout_seconds: nullableNumber(data.fastcgi_read_timeout_seconds),
       proxy_connect_timeout_seconds: nullableNumber(data.proxy_connect_timeout_seconds),
@@ -158,6 +170,19 @@ export default function PhpSettingsDialog({ open, onOpenChange, site }: { open: 
               <NumericField id="fpm_max_requests" label="Max requests per child" hint="Recycle workers to limit long-lived growth." min={1} max={100000} value={form.data.fpm_max_requests} error={form.errors.fpm_max_requests} onChange={(next) => form.setData('fpm_max_requests', next)} />
               <NumericField id="request_timeout_seconds" label="Request timeout (seconds)" hint="Hard FPM request termination limit." min={1} max={3600} value={form.data.request_timeout_seconds} error={form.errors.request_timeout_seconds} onChange={(next) => form.setData('request_timeout_seconds', next)} />
               <NumericField id="slow_request_seconds" label="Slow log threshold" hint="Optional; must be below request timeout." min={1} max={3600} value={form.data.slow_request_seconds} error={form.errors.slow_request_seconds} onChange={(next) => form.setData('slow_request_seconds', next)} />
+            </div>
+          </section>}
+
+          {tuning?.fpm_service_mode === 'dedicated_master' && <section className="space-y-3">
+            <div>
+              <h3 className="font-medium">Systemd resource limits</h3>
+              <p className="text-muted-foreground text-xs">Applied to this site's dedicated PHP-FPM service and slice.</p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <NumericField id="cpu_quota_percent" label="CPU quota (%)" hint="Optional total CPU ceiling; 100% equals one CPU." min={1} max={1000} value={form.data.cpu_quota_percent} error={form.errors.cpu_quota_percent} onChange={(next) => form.setData('cpu_quota_percent', next)} />
+              <NumericField id="tasks_max" label="Maximum tasks" hint="Optional maximum processes and threads." min={1} max={1000000} value={form.data.tasks_max} error={form.errors.tasks_max} onChange={(next) => form.setData('tasks_max', next)} />
+              <NumericField id="memory_high_mb" label="Memory high (MB)" hint="Optional pressure threshold before the hard limit." min={1} max={1048576} value={form.data.memory_high_mb} error={form.errors.memory_high_mb} onChange={(next) => form.setData('memory_high_mb', next)} />
+              <NumericField id="memory_max_mb" label="Memory max (MB)" hint="Optional hard cgroup memory limit." min={1} max={1048576} value={form.data.memory_max_mb} error={form.errors.memory_max_mb} onChange={(next) => form.setData('memory_max_mb', next)} />
             </div>
           </section>}
 

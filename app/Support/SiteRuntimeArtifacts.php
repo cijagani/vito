@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Enums\FpmServiceMode;
 use App\Enums\SiteRuntimeConfigType;
 use App\Models\Site;
 use InvalidArgumentException;
@@ -80,6 +81,37 @@ final readonly class SiteRuntimeArtifacts
         return '/etc/php/'.$phpVersion.'/fpm/pool.d/'.$this->key().'.conf';
     }
 
+    public function dedicatedFpmConfigPath(string $phpVersion): string
+    {
+        $this->ensurePhpVersion($phpVersion);
+
+        return '/etc/php/'.$phpVersion.'/fpm/vito-sites/'.$this->key().'.conf';
+    }
+
+    public function fpmConfigPath(string $phpVersion, FpmServiceMode $serviceMode): string
+    {
+        return $serviceMode === FpmServiceMode::DEDICATED_MASTER
+            ? $this->dedicatedFpmConfigPath($phpVersion)
+            : $this->fpmPoolPath($phpVersion);
+    }
+
+    public function dedicatedFpmServiceUnit(string $phpVersion): string
+    {
+        $this->ensurePhpVersion($phpVersion);
+
+        return $this->key().'-php'.$phpVersion.'-fpm.service';
+    }
+
+    public function dedicatedFpmServicePath(string $phpVersion): string
+    {
+        return '/etc/systemd/system/'.$this->dedicatedFpmServiceUnit($phpVersion);
+    }
+
+    public function systemdSlicePath(): string
+    {
+        return '/etc/systemd/system/'.$this->systemdSlice();
+    }
+
     public function fpmSocketPath(string $phpVersion): string
     {
         $this->ensurePhpVersion($phpVersion);
@@ -109,6 +141,24 @@ final readonly class SiteRuntimeArtifacts
         }
 
         return $this->fpmStateDirectory($phpVersion).'/candidate-'.$checksum.'.conf';
+    }
+
+    public function fpmServiceCandidatePath(string $phpVersion, string $checksum): string
+    {
+        if (preg_match('/\A[a-f0-9]{64}\z/', $checksum) !== 1) {
+            throw new InvalidArgumentException('A SHA-256 checksum is required for a PHP-FPM service candidate.');
+        }
+
+        return $this->fpmStateDirectory($phpVersion).'/candidate-'.$checksum.'.service';
+    }
+
+    public function systemdSliceCandidatePath(string $phpVersion, string $checksum): string
+    {
+        if (preg_match('/\A[a-f0-9]{64}\z/', $checksum) !== 1) {
+            throw new InvalidArgumentException('A SHA-256 checksum is required for a systemd slice candidate.');
+        }
+
+        return $this->fpmStateDirectory($phpVersion).'/candidate-'.$checksum.'.slice';
     }
 
     public function logDirectory(): string
@@ -151,11 +201,15 @@ final readonly class SiteRuntimeArtifacts
         return '/etc/cron.d/'.$this->key();
     }
 
-    public function expectedTargetPath(SiteRuntimeConfigType $type, ?string $phpVersion = null): string
+    public function expectedTargetPath(
+        SiteRuntimeConfigType $type,
+        ?string $phpVersion = null,
+        FpmServiceMode $fpmServiceMode = FpmServiceMode::SHARED_MASTER,
+    ): string
     {
         return match ($type) {
             SiteRuntimeConfigType::NGINX => $this->nginxAvailablePath(),
-            SiteRuntimeConfigType::PHP_FPM => $this->fpmPoolPath($phpVersion ?? ''),
+            SiteRuntimeConfigType::PHP_FPM => $this->fpmConfigPath($phpVersion ?? '', $fpmServiceMode),
             SiteRuntimeConfigType::PHP_CLI => $this->phpCliProfilePath(),
             SiteRuntimeConfigType::FILESYSTEM => $this->systemdLimitsPath(),
             SiteRuntimeConfigType::WORKERS => $this->workersPath(),

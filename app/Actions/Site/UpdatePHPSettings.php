@@ -3,6 +3,7 @@
 namespace App\Actions\Site;
 
 use App\Enums\FpmProcessManager;
+use App\Enums\FpmServiceMode;
 use App\Exceptions\SSHError;
 use App\Models\Site;
 use App\Models\SiteRuntimeProfile;
@@ -56,6 +57,10 @@ class UpdatePHPSettings
                     'fpm_max_requests',
                     'request_timeout_seconds',
                     'slow_request_seconds',
+                    'cpu_quota_percent',
+                    'memory_high_mb',
+                    'memory_max_mb',
+                    'tasks_max',
                 ]));
                 $this->saveWithRevision($runtime);
             }
@@ -132,6 +137,10 @@ class UpdatePHPSettings
             'fpm_max_requests' => ['sometimes', 'integer', 'min:1', 'max:100000'],
             'request_timeout_seconds' => ['sometimes', 'integer', 'min:1', 'max:3600'],
             'slow_request_seconds' => ['nullable', 'integer', 'min:1', 'max:3600'],
+            'cpu_quota_percent' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'memory_high_mb' => ['nullable', 'integer', 'min:1', 'max:1048576'],
+            'memory_max_mb' => ['nullable', 'integer', 'min:1', 'max:1048576'],
+            'tasks_max' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'client_max_body_size_mb' => ['nullable', 'integer', 'min:1', 'max:10240'],
             'fastcgi_read_timeout_seconds' => ['nullable', 'integer', 'min:1', 'max:3600'],
             'proxy_connect_timeout_seconds' => ['nullable', 'integer', 'min:1', 'max:600'],
@@ -178,6 +187,20 @@ class UpdatePHPSettings
                 $validator->errors()->add('slow_request_seconds', 'The slow request threshold must be below the request timeout.');
             }
 
+            $memoryHigh = $this->intOrNull($input['memory_high_mb'] ?? $profile->memory_high_mb);
+            $memoryMax = $this->intOrNull($input['memory_max_mb'] ?? $profile->memory_max_mb);
+            if ($memoryHigh !== null && $memoryMax !== null && $memoryHigh > $memoryMax) {
+                $validator->errors()->add('memory_high_mb', 'Memory high must be less than or equal to memory max.');
+            }
+
+            if ($profile->fpm_service_mode !== FpmServiceMode::DEDICATED_MASTER) {
+                foreach (['cpu_quota_percent', 'memory_high_mb', 'memory_max_mb', 'tasks_max'] as $field) {
+                    if (array_key_exists($field, $input) && $input[$field] !== null && $input[$field] !== '') {
+                        $validator->errors()->add($field, 'Resource limits require a dedicated PHP-FPM service.');
+                    }
+                }
+            }
+
             if ($site->webserver()->id() !== 'nginx' && ! empty($input['rate_limit_profile'])) {
                 $validator->errors()->add('rate_limit_profile', 'Rate-limit profiles are currently supported only by Nginx.');
             }
@@ -213,6 +236,18 @@ class UpdatePHPSettings
             'slow_request_seconds' => array_key_exists('slow_request_seconds', $validated)
                 ? $this->intOrNull($validated['slow_request_seconds'])
                 : $runtime->slow_request_seconds,
+            'cpu_quota_percent' => array_key_exists('cpu_quota_percent', $validated)
+                ? $this->intOrNull($validated['cpu_quota_percent'])
+                : $runtime->cpu_quota_percent,
+            'memory_high_mb' => array_key_exists('memory_high_mb', $validated)
+                ? $this->intOrNull($validated['memory_high_mb'])
+                : $runtime->memory_high_mb,
+            'memory_max_mb' => array_key_exists('memory_max_mb', $validated)
+                ? $this->intOrNull($validated['memory_max_mb'])
+                : $runtime->memory_max_mb,
+            'tasks_max' => array_key_exists('tasks_max', $validated)
+                ? $this->intOrNull($validated['tasks_max'])
+                : $runtime->tasks_max,
             'client_max_body_size_mb' => array_key_exists('client_max_body_size_mb', $validated)
                 ? $this->intOrNull($validated['client_max_body_size_mb'])
                 : $this->intOrNull($validated['max_upload_size'] ?? $web->client_max_body_size_mb),

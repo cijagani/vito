@@ -27,7 +27,7 @@ class SyncSiteRuntimeProfiles
             $runtime = SiteRuntimeProfile::query()->firstOrNew(['site_id' => $lockedSite->id]);
             if (! $runtime->exists) {
                 $runtime->fill([
-                    'fpm_service_mode' => FpmServiceMode::SHARED_MASTER,
+                    'fpm_service_mode' => FpmServiceMode::DEDICATED_MASTER,
                     'fpm_process_manager' => FpmProcessManager::DYNAMIC,
                     'fpm_max_children' => 5,
                     'fpm_start_servers' => 2,

@@ -4,6 +4,7 @@ namespace App\Services\PHP;
 
 use App\Actions\PHP\ApplySiteFpmConfig;
 use App\DTOs\ServiceLog;
+use App\Enums\FpmServiceMode;
 use App\Exceptions\SSHCommandError;
 use App\Exceptions\SSHError;
 use App\Models\Site;
@@ -177,9 +178,15 @@ class PHP extends AbstractService implements HasLogs
 
         $artifacts = $site->runtimeArtifacts();
         $removingCurrentRuntime = $phpVersion === null || $version === $site->php_version;
+        $dedicated = $site->runtimeProfile()->value('fpm_service_mode') === 'dedicated_master';
         $this->service->server->ssh()->exec(
-            view('ssh.services.php.remove-site-fpm-pool', [
-                'targetPath' => $artifacts->fpmPoolPath($version),
+            view($dedicated
+                ? 'ssh.services.php.remove-dedicated-site-fpm-config'
+                : 'ssh.services.php.remove-site-fpm-pool', [
+                'targetPath' => $artifacts->fpmConfigPath(
+                    $version,
+                    $dedicated ? FpmServiceMode::DEDICATED_MASTER : FpmServiceMode::SHARED_MASTER,
+                ),
                 'socketPath' => $artifacts->fpmSocketPath($version),
                 'stateDirectory' => $artifacts->fpmStateDirectory($version),
                 'cliRuntimeDirectory' => $artifacts->phpCliIniDirectory(),
@@ -187,9 +194,13 @@ class PHP extends AbstractService implements HasLogs
                 'removeCliRuntime' => $removingCurrentRuntime,
                 'removeSitePhpLink' => $removingCurrentRuntime && ! $site->userSharedWithSiblings(),
                 'fpmBinary' => '/usr/sbin/php-fpm'.$version,
-                'serviceUnit' => 'php'.$version.'-fpm',
+                'serviceUnit' => $dedicated
+                    ? $artifacts->dedicatedFpmServiceUnit($version)
+                    : 'php'.$version.'-fpm',
+                'servicePath' => $artifacts->dedicatedFpmServicePath($version),
+                'slicePath' => $artifacts->systemdSlicePath(),
             ]),
-            'remove-site-fpm-pool',
+            $dedicated ? 'remove-dedicated-site-fpm-config' : 'remove-site-fpm-pool',
             $site->id,
         );
     }

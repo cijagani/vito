@@ -39,6 +39,11 @@ Both modes support maximum children, child recycling, a hard request timeout, an
 request log threshold. The slow threshold must remain below the hard request timeout. Dynamic
 values must satisfy `minimum spare <= start <= maximum spare <= maximum children`.
 
+New isolated PHP sites run their own PHP-FPM master in a dedicated systemd service. Optional CPU,
+memory-high, memory-max, and task limits are applied to that service's systemd slice, so they are
+enforced by the operating system rather than treated as advisory panel values. These limits apply to
+the PHP-FPM request runtime; they do not replace database limits or filesystem quotas.
+
 Webserver controls include request-body and upstream timeouts, per-site access logging, and a static
 asset cache policy. Nginx sites can additionally select a validated standard or strict request-rate
 profile. Rate limiting is not currently offered for Caddy sites.
