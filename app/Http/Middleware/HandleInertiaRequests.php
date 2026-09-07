@@ -75,7 +75,7 @@ class HandleInertiaRequests extends Middleware
             if ($request->route('site')) {
                 /** @var Site $site */
                 $site = $request->route('site');
-                $site->load('hostedDomains.ssl', 'workers', 'runtimeProfile', 'webProfile', 'server.latestMetric');
+                $site->load('hostedDomains.ssl', 'workers', 'runtimeProfile', 'webProfile', 'latestRuntimeMetric', 'server.latestMetric');
                 $data['site'] = SiteResource::make($site);
             }
         }

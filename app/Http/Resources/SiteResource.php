@@ -125,6 +125,7 @@ class SiteResource extends JsonResource
             ->sum(fn (SiteRuntimeProfile $profile): int => $profile->fpm_max_children * ($profile->memory_limit_mb ?? 128));
         $memoryTotalKb = $this->server->latestMetric?->memory_total;
         $serverMemoryMb = is_numeric($memoryTotalKb) ? (int) floor((float) $memoryTotalKb / 1024) : null;
+        $metric = $this->relationLoaded('latestRuntimeMetric') ? $this->latestRuntimeMetric : null;
 
         return [
             'isolation_profile' => $runtime->isolation_profile->value,
@@ -160,6 +161,15 @@ class SiteResource extends JsonResource
             'web_applied_revision' => $web->applied_revision,
             'runtime_last_applied_at' => $runtime->last_applied_at,
             'web_last_applied_at' => $web->last_applied_at,
+            'observed_memory_current_mb' => $metric?->memory_current_bytes !== null
+                ? round($metric->memory_current_bytes / 1024 / 1024, 2)
+                : null,
+            'observed_memory_peak_mb' => $metric?->memory_peak_bytes !== null
+                ? round($metric->memory_peak_bytes / 1024 / 1024, 2)
+                : null,
+            'observed_tasks_current' => $metric?->tasks_current,
+            'observed_oom_kill_count' => $metric?->oom_kill_count,
+            'observed_at' => $metric?->created_at,
         ];
     }
 }

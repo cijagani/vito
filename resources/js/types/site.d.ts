@@ -61,6 +61,11 @@ export interface Site {
     web_applied_revision: number | null;
     runtime_last_applied_at: string | null;
     web_last_applied_at: string | null;
+    observed_memory_current_mb: number | null;
+    observed_memory_peak_mb: number | null;
+    observed_tasks_current: number | null;
+    observed_oom_kill_count: number | null;
+    observed_at: string | null;
   } | null;
   supports_php_settings: boolean;
   repository: string;

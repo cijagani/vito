@@ -304,6 +304,22 @@ class Site extends AbstractModel
     }
 
     /**
+     * @return HasOne<SiteRuntimeMetric, covariant $this>
+     */
+    public function latestRuntimeMetric(): HasOne
+    {
+        return $this->hasOne(SiteRuntimeMetric::class)->latestOfMany();
+    }
+
+    /**
+     * @return HasMany<SiteRuntimeMetric, covariant $this>
+     */
+    public function runtimeMetrics(): HasMany
+    {
+        return $this->hasMany(SiteRuntimeMetric::class);
+    }
+
+    /**
      * @return HasOne<SiteWebProfile, covariant $this>
      */
     public function webProfile(): HasOne

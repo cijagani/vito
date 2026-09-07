@@ -238,13 +238,21 @@ export default function Databases() {
               </div>
             </CardHeader>
             <CardContent className="bg-background">
-              <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div><p className="text-muted-foreground text-xs">Isolation profile</p><p className="font-medium capitalize">{page.props.site.runtime_tuning.isolation_profile.replace('_', ' ')}</p></div>
                 <div><p className="text-muted-foreground text-xs">FPM manager</p><p className="font-medium capitalize">{page.props.site.runtime_tuning.fpm_process_manager}</p></div>
                 <div><p className="text-muted-foreground text-xs">Effective socket</p><p className="truncate font-mono text-xs">{page.props.site.runtime_tuning.effective_socket}</p></div>
                 <div><p className="text-muted-foreground text-xs">Theoretical pool memory</p><p className="font-medium">{page.props.site.runtime_tuning.estimated_fpm_memory_mb} MB</p></div>
-              </div>
-              <Separator />
+                </div>
+                {page.props.site.runtime_tuning.observed_at && (
+                  <div className="grid gap-4 border-t p-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div><p className="text-muted-foreground text-xs">FPM memory now</p><p className="font-medium">{page.props.site.runtime_tuning.observed_memory_current_mb ?? '—'}{page.props.site.runtime_tuning.observed_memory_current_mb !== null && ' MB'}</p></div>
+                    <div><p className="text-muted-foreground text-xs">FPM memory peak</p><p className="font-medium">{page.props.site.runtime_tuning.observed_memory_peak_mb ?? '—'}{page.props.site.runtime_tuning.observed_memory_peak_mb !== null && ' MB'}</p></div>
+                    <div><p className="text-muted-foreground text-xs">FPM tasks</p><p className="font-medium">{page.props.site.runtime_tuning.observed_tasks_current ?? '—'}</p></div>
+                    <div><p className="text-muted-foreground text-xs">Cgroup OOM kills</p><p className="font-medium">{page.props.site.runtime_tuning.observed_oom_kill_count ?? '—'}</p></div>
+                  </div>
+                )}
+                <Separator />
               <div className="flex flex-wrap gap-2 p-4 text-sm">
                 <Badge variant={page.props.site.runtime_tuning.runtime_drifted ? 'warning' : 'success'}>FPM {page.props.site.runtime_tuning.runtime_drifted ? 'drifted' : 'applied'}</Badge>
                 <Badge variant={page.props.site.runtime_tuning.web_drifted ? 'warning' : 'success'}>Web {page.props.site.runtime_tuning.web_drifted ? 'drifted' : 'applied'}</Badge>
