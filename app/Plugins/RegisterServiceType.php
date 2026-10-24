@@ -11,6 +11,7 @@ class RegisterServiceType
      * @param  array<string>  $versions
      * @param  array<string, mixed>  $data
      * @param  array<int, array{name: string, path: string, sudo: bool}>  $configPaths
+     * @param  array<string, array<string>>  $osVersions
      */
     public function __construct(
         private string $name,
@@ -21,7 +22,8 @@ class RegisterServiceType
         private ?DynamicForm $form = null,
         private array $versions = ['latest'],
         private array $data = [],
-        private array $configPaths = []
+        private array $configPaths = [],
+        private array $osVersions = []
     ) {}
 
     public static function make(string $name): self
@@ -82,6 +84,18 @@ class RegisterServiceType
     }
 
     /**
+     * Restrict the versions offered on specific operating systems, keyed by OperatingSystem value.
+     *
+     * @param  array<string, array<string>>  $osVersions
+     */
+    public function osVersions(array $osVersions): self
+    {
+        $this->osVersions = $osVersions;
+
+        return $this;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public function data(array $data): self
@@ -116,6 +130,7 @@ class RegisterServiceType
             'handler' => $this->handler,
             'form' => $this->form ? $this->form->toArray() : [],
             'versions' => $this->versions,
+            'os_versions' => $this->osVersions,
             'data' => $this->data,
             'config_paths' => $this->configPaths,
         ];

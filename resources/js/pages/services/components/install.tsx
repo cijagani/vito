@@ -38,6 +38,9 @@ export default function InstallService({ name, children }: { name?: string; chil
     version: '',
   });
 
+  const service = configs.service.services[form.data.name];
+  const versions = service ? (service.os_versions?.[page.props.server.os] ?? service.versions) : [];
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     form.post(route('services.store', { server: page.props.server.id }), {
@@ -121,20 +124,19 @@ export default function InstallService({ name, children }: { name?: string; chil
                     <CommandInput placeholder="Search version..." />
                     <CommandList>
                       <CommandGroup>
-                        {form.data.name &&
-                          configs.service.services[form.data.name].versions.map((version) => (
-                            <CommandItem
-                              key={`version-${form.data.name}-${version}`}
-                              value={version}
-                              onSelect={() => {
-                                form.setData('version', version);
-                                setVersionOpen(false);
-                              }}
-                            >
-                              {version}
-                              <CheckIcon className={cn('ml-auto', form.data.version === version ? 'opacity-100' : 'opacity-0')} />
-                            </CommandItem>
-                          ))}
+                        {versions.map((version) => (
+                          <CommandItem
+                            key={`version-${form.data.name}-${version}`}
+                            value={version}
+                            onSelect={() => {
+                              form.setData('version', version);
+                              setVersionOpen(false);
+                            }}
+                          >
+                            {version}
+                            <CheckIcon className={cn('ml-auto', form.data.version === version ? 'opacity-100' : 'opacity-0')} />
+                          </CommandItem>
+                        ))}
                       </CommandGroup>
                     </CommandList>
                   </Command>

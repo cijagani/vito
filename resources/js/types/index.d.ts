@@ -102,6 +102,7 @@ export interface Configs {
         handler: string;
         form?: DynamicFieldConfig[];
         versions: string[];
+        os_versions?: Record<string, string[]>;
         data?: {
           extensions?: string[];
         };

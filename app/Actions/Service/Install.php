@@ -19,7 +19,7 @@ class Install
      */
     public function install(Server $server, array $input): Service
     {
-        $this->validate($input);
+        $this->validate($server, $input);
 
         $name = $input['name'];
         $input['type'] = config("service.services.$name.type");
@@ -48,7 +48,7 @@ class Install
         return $service;
     }
 
-    private function validate(array $input): void
+    private function validate(Server $server, array $input): void
     {
         $installable = collect(config('service.services'))
             ->reject(fn (array $service): bool => ($service['type'] ?? null) === 'vpn')
@@ -65,7 +65,7 @@ class Install
             ],
         ];
         if (isset($input['name'])) {
-            $rules['version'][] = Rule::in(config("service.services.{$input['name']}.versions", []));
+            $rules['version'][] = Rule::in($server->os->serviceVersions($input['name']));
         }
 
         Validator::make($input, $rules)->validate();

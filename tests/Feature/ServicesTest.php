@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\OperatingSystem;
 use App\Enums\ServiceStatus;
 use App\Facades\SSH;
 use App\Models\Server;
@@ -295,6 +296,31 @@ test('install service', function (string $name, string $type, string $version) {
         'status' => ServiceStatus::READY,
     ]);
 })->with('installData');
+
+test('install service rejects versions unavailable on the server os', function (string $name, string $version) {
+    SSH::fake();
+
+    $this->actingAs($this->user);
+
+    $server = Server::factory()->create([
+        'user_id' => $this->user->id,
+        'project_id' => $this->user->current_project_id,
+        'os' => OperatingSystem::UBUNTU26,
+    ]);
+
+    $this->post(route('services.store', ['server' => $server]), [
+        'name' => $name,
+        'version' => $version,
+    ])->assertSessionHasErrors('version');
+
+    $this->assertDatabaseMissing('services', [
+        'server_id' => $server->id,
+        'name' => $name,
+    ]);
+})->with([
+    ['php', '8.2'],
+    ['mariadb', '11.4'],
+]);
 
 test('install service creates installation log', function () {
     Http::fake([

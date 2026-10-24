@@ -2,6 +2,7 @@
 
 namespace App\Actions\Server;
 
+use App\Enums\OperatingSystem;
 use App\Jobs\Server\InstallJob;
 use App\Models\Project;
 use App\Models\Server;
@@ -140,7 +141,24 @@ class CreateServer
             ],
         ];
 
-        Validator::make($input, array_merge($rules, $this->providerRules($input)))->validate();
+        $messages = [];
+        $os = OperatingSystem::tryFrom((string) ($input['os'] ?? ''));
+        if ($os && is_array($input['services'] ?? null)) {
+            unset($rules['services.*.version']);
+            foreach ($input['services'] as $key => $service) {
+                $name = is_string(data_get($service, 'name')) ? data_get($service, 'name') : '';
+                $rules["services.$key.version"] = [
+                    'string',
+                    Rule::in($os->serviceVersions($name)),
+                ];
+                $messages["services.$key.version.in"] = __(':service :input is not available on :os.', [
+                    'service' => $name,
+                    'os' => $os->getText(),
+                ]);
+            }
+        }
+
+        Validator::make($input, array_merge($rules, $this->providerRules($input)), $messages)->validate();
     }
 
     /**

@@ -23,7 +23,7 @@ use Laravel\Sanctum\Sanctum;
 
 uses(RefreshDatabase::class);
 
-test('create server', function () {
+test('create server', function (OperatingSystem $os) {
     $this->actingAs($this->user);
 
     Storage::fake();
@@ -35,7 +35,7 @@ test('create server', function () {
         'name' => 'test',
         'ip' => '1.1.1.1',
         'port' => '22',
-        'os' => OperatingSystem::UBUNTU22->value,
+        'os' => $os->value,
         'services' => [
             [
                 'name' => 'ufw',
@@ -49,6 +49,7 @@ test('create server', function () {
     $this->assertDatabaseHas('servers', [
         'name' => 'test',
         'ip' => '1.1.1.1',
+        'os' => $os->value,
         'status' => ServerStatus::READY,
     ]);
 
@@ -62,6 +63,31 @@ test('create server', function () {
         'version' => 'latest',
         'status' => ServiceStatus::READY,
     ]);
+})->with([
+    OperatingSystem::UBUNTU22,
+    OperatingSystem::UBUNTU24,
+    OperatingSystem::UBUNTU26,
+]);
+
+test('cannot create server with a service version unavailable on the os', function () {
+    $this->actingAs($this->user);
+
+    $this->post(route('servers.store'), [
+        'provider' => Custom::id(),
+        'name' => 'test',
+        'ip' => '1.1.1.1',
+        'port' => '22',
+        'os' => OperatingSystem::UBUNTU26->value,
+        'services' => [
+            [
+                'name' => 'php',
+                'type' => 'php',
+                'version' => '8.2',
+            ],
+        ],
+    ])->assertSessionHasErrors(['services.0.version' => 'php 8.2 is not available on ubuntu_26.']);
+
+    $this->assertDatabaseMissing('servers', ['name' => 'test']);
 });
 
 test('delete server', function () {

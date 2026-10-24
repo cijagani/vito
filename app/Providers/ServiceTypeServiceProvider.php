@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Enums\OperatingSystem;
 use App\Plugins\RegisterServiceType;
 use App\Services\Database\Mariadb;
 use App\Services\Database\Mysql;
@@ -132,6 +133,9 @@ class ServiceTypeServiceProvider extends ServiceProvider
                 '11.4',
                 '10.11',
             ])
+            ->osVersions([
+                OperatingSystem::UBUNTU26->value => ['12.3', '11.8'],
+            ])
             ->configPaths([
                 [
                     'name' => 'my.cnf',
@@ -254,6 +258,9 @@ class ServiceTypeServiceProvider extends ServiceProvider
                 '7.1',
                 '7.0',
                 '5.6',
+            ])
+            ->osVersions([
+                OperatingSystem::UBUNTU26->value => ['8.5', '8.4', '8.3'],
             ])
             ->data([
                 'extensions' => [

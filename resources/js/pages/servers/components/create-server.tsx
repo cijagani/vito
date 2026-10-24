@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useForm } from '@inertiajs/react';
-import React, { FormEventHandler, useEffect, useState } from 'react';
+import React, { FormEventHandler, useEffect, useMemo, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import InputError from '@/components/ui/input-error';
@@ -64,7 +64,7 @@ type CreateServerForm = {
   services: Service[];
 };
 
-function AddService() {
+function AddService({ os }: { os: string }) {
   const [open, setOpen] = useState(false);
   const configs = useConfigs()!;
   const form = useForm<Service>({
@@ -72,6 +72,9 @@ function AddService() {
     name: '',
     version: '',
   });
+
+  const service = configs.service.services[form.data.name];
+  const versions = service ? (service.os_versions?.[os] ?? service.versions) : [];
 
   const add = () => {
     if (!form.data.name) {
@@ -141,12 +144,11 @@ function AddService() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {form.data.name &&
-                      configs.service.services[form.data.name].versions.map((version) => (
-                        <SelectItem key={`version-${form.data.name}-${version}`} value={version}>
-                          {version}
-                        </SelectItem>
-                      ))}
+                    {versions.map((version) => (
+                      <SelectItem key={`version-${form.data.name}-${version}`} value={version}>
+                        {version}
+                      </SelectItem>
+                    ))}
                   </SelectGroup>
                 </SelectContent>
               </Select>
@@ -170,7 +172,7 @@ function AddService() {
   );
 }
 
-const servicesColumns: ColumnDef<Service>[] = [
+const servicesColumns = (os: string): ColumnDef<Service>[] => [
   {
     accessorKey: 'type',
     header: 'Type',
@@ -185,7 +187,7 @@ const servicesColumns: ColumnDef<Service>[] = [
   },
   {
     id: 'actions',
-    header: () => <AddService />,
+    header: () => <AddService os={os} />,
     enableSorting: false,
     cell: ({ row }) => (
       <div className="flex items-center justify-end">
@@ -288,6 +290,8 @@ export default function CreateServer({
       },
     ],
   });
+
+  const columns = useMemo(() => servicesColumns(form.data.os), [form.data.os]);
 
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
@@ -611,7 +615,7 @@ export default function CreateServer({
                   <ServerTemplates services={form.data.services} onTemplateChanged={serverTemplateChanged} />
                 </div>
                 <div>
-                  <DataTable columns={servicesColumns} data={form.data.services} />
+                  <DataTable columns={columns} data={form.data.services} />
                 </div>
                 {Object.entries(form.errors)
                   .filter(([key, value]) => {

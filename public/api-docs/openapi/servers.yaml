@@ -85,7 +85,7 @@ paths:
                   example: 'production-server'
                 os:
                   type: string
-                  enum: ['ubuntu_20', 'ubuntu_22', 'ubuntu_24']
+                  enum: ['ubuntu_20', 'ubuntu_22', 'ubuntu_24', 'ubuntu_26']
                   description: Operating system
                   example: 'ubuntu_22'
                 server_provider:
